@@ -1,0 +1,13 @@
+name = "docs"
+uuid = "180a1854-a0c1-4b8f-98ce-b9f00a1e41e0"
+version = "0.1.0"
+
+[deps]
+BnGsim = "fa058a0c-7e86-4bcb-95e5-acc93d12197f"
+Documenter = "e30172f5-a6a5-5a46-863b-614d45cd2de4"
+
+[sources]
+BnGsim = {path = ".."}
+
+[compat]
+Documenter = "1"
