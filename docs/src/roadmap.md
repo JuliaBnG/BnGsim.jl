@@ -199,11 +199,10 @@ relationship matrix Σ (`A`, `G`, `H` or `I`), so one call covers TS, RTS,
 OCS and ROCS.
 
 *Julia support:* BnGsim supports Julia 1.10 (LTS) through the current
-release. Breeding 0.2 requires Julia ≥ 1.12, so in v0.1 Breeding is **not**
-a dependency, and `provenance` reports it only if the session has loaded
-it. When Phase 4 adds Breeding as a dependency, one of two things has to
-happen first: Breeding lowers its floor to 1.10, or BnGsim raises its own
-floor and records the change as breaking in `NEWS.md`.
+release. In v0.1 Breeding is **not** a dependency, and `provenance` reports
+it only if the session has loaded it. Breeding lowered its floor to Julia
+1.10 in v0.2.1, so Phase 4 can add `Breeding = "0.2.1"` without raising
+BnGsim's Julia floor.
 
 ### 4.7 CLI-first boundary and layering
 
@@ -446,7 +445,7 @@ in Phase 4.
 | Dense `G` memory wall | Medium | §5 capacity model; `bngsim estimate` admission. |
 | Flaky statistical tests getting muted | Medium | Tier 2 kept separate, with pre-registered tolerances and fixed seeds. |
 | Duplicated evaluation code in BnGsim and Breeding | Medium | §4.6: BnGsim never solves MMEs. |
-| Julia floor mismatch with Breeding (1.12 vs 1.10 LTS) | Medium | §4.6: decide before Phase 4; CI covers 1.10 and the current release. |
+| Julia floor mismatch with Breeding | Resolved | Breeding 0.2.1 supports Julia 1.10 (§4.6); CI covers 1.10 and the current release. |
 | Scope inflation | Medium | Phase 0 vertical slice first; §9 re-entry triggers. |
 | Web dependencies leaking into the core | Medium | CLI subprocess boundary; Phase 6 gate. |
 | Disk exhaustion on the worker | Medium | Tiered artifacts, retention classes, quotas, GC. |

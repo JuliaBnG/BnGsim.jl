@@ -20,5 +20,5 @@ requires BnGStructs 0.2.7, FisherWright 0.6 and RelationshipMatrices 0.6.1.
 - Founder diagnostics: `founder_summary`, `ld_decay`, `vanraden_g`.
 - `provenance` writes a reproducibility header with host, threads, seed,
   and the version and git commit of each package. Breeding.jl is not a
-  dependency (it requires Julia ≥ 1.12) and is listed only when loaded.
+  dependency and is listed only when loaded.
 - Docs: a roadmap page replaces the earlier working plans.
