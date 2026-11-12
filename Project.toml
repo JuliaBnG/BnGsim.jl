@@ -2,6 +2,7 @@ name = "BnGsim"
 uuid = "fa058a0c-7e86-4bcb-95e5-acc93d12197f"
 version = "0.1.0"
 authors = ["Xijiang Yu <xijiang@users.noreply.github.com>"]
+license = "MIT"
 docs = "https://juliabng.github.io/BnGsim/"
 homepage = "https://juliabng.github.io/BnGsim/"
 repository = "https://github.com/JuliaBnG/BnGsim.jl"
