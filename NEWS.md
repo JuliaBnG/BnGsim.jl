@@ -8,6 +8,9 @@ Requires BnGStructs 0.3.
   `expand` check that the `VariantMap` is on the genome of the species
   (`BnGStructs.check_coordinates`). A map with within-chromosome
   positions used to give wrong recombinants without an error.
+- Meiosis takes the genetic length of each chromosome from the species
+  (`BnGStructs.map_length`), so `Species(...; morgan = ...)` is honoured.
+  With the default map the crossovers are unchanged.
 - `read_packed_haplotypes` reads through `BnGStructs.read_haplotypes`,
   which now owns the `BNGH1` format; its result is unchanged.
 - Record columns are named through `BnGStructs.trait_columns`; the names

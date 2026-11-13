@@ -18,7 +18,13 @@ function sum_map(chr_len::AbstractVector{<:Integer}; M::Real = 1e8)
     )
 end
 
-sum_map(sp::Species) = sum_map(sp.chromosome; M = sp.M)
+# Genetic lengths come from the species (`map_length`), which defaults to
+# `chromosome ./ M` and may be set per chromosome.
+sum_map(sp::Species) = DataFrame(
+    chr = Int8.(1:length(sp)),
+    len = copy(map_length(sp)),
+    ebp = copy(cbp(sp)),
+)
 
 function sum_map(vm::VariantMap; cM::Real = 1e6)
     lms = DataFrame(

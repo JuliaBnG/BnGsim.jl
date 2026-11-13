@@ -92,6 +92,20 @@ end
 
         # sum_map
         lms_sp = sum_map(sp_toy)
+        # default map: identical to the uniform one; per-chromosome lengths are honoured
+        @test lms_sp == sum_map(sp_toy.chromosome; M = sp_toy.M)
+        sp_len = GenericSpecies("toy", 20, [1_000_000, 1_000_000]; morgan = [0.5, 2.0])
+        @test sum_map(sp_len).len == [0.5, 2.0]
+        # Crossover counts per chromosome are Poisson with the stated lengths:
+        # 400 meioses, means 0.5 and 2.0, tolerance 4 standard errors.
+        n1 = n2 = 0
+        for seed = 1:400
+            pts = crossovers(sp_len, vm0; rng = MersenneTwister(seed))[1][2:end]
+            n1 += count(p -> p < 1_000_000, pts)                 # chromosome ends mark assortment
+            n2 += count(p -> 1_000_000 < p < 2_000_000, pts)
+        end
+        @test abs(n1 / 400 - 0.5) < 4 * sqrt(0.5 / 400)
+        @test abs(n2 / 400 - 2.0) < 4 * sqrt(2.0 / 400)
         @test nrow(lms_sp) == 2
         lms_vm = sum_map(vm0)
         @test nrow(lms_vm) == 2 && sum(lms_vm.nlc) == nlc
