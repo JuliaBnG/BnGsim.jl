@@ -31,20 +31,27 @@ HistoricalSpec(name::AbstractString, sp::Species, nt::Integer, mr::Real) =
     HistoricalSpec(String(name), Int(sp.nid), Int(nt), Float64(mr), copy(sp.chromosome), Float64(sp.M))
 
 """
-    historical_population(spec::HistoricalSpec; seed, verbose = false, progress_interval = 1000)
-        -> FisherWrightResult
+    historical_population(spec::HistoricalSpec; seed = nothing, rng = Xoshiro(seed),
+                          verbose = false, progress_interval = 1000) -> FisherWrightResult
 
-Run the historical population described by `spec`. The global RNG is seeded
-with `seed`; FisherWright draws from task-local RNGs inside `Threads.@threads`,
-so the result is reproducible only at the same thread count.
+Run the historical population described by `spec`. Give either an integer
+`seed`, which starts a fresh `Xoshiro(seed)` stream, or an `rng`. The
+global RNG is not touched. FisherWright draws every haplotype from its
+own stream seeded from `rng`, so the result does not depend on the number
+of threads.
+
+A given `seed` gives the same population as in BnGsim 0.1.0, where the
+global RNG was seeded with it.
 """
 function historical_population(
     spec::HistoricalSpec;
-    seed::Integer,
+    seed::Union{Nothing,Integer} = nothing,
+    rng::Union{Nothing,AbstractRNG} = nothing,
     verbose::Bool = false,
     progress_interval::Integer = 1000,
 )
-    Random.seed!(seed)
+    (seed === nothing) == (rng === nothing) &&
+        throw(ArgumentError("give exactly one of seed or rng"))
     return fisher_wright(
         spec.ne,
         spec.nt,
@@ -54,6 +61,7 @@ function historical_population(
         result = true,
         verbose = verbose,
         progress_interval = progress_interval,
+        rng = rng === nothing ? Xoshiro(seed) : rng,
     )
 end
 
@@ -63,17 +71,18 @@ end
 
 Continue a FisherWright population for `length(ns)` further generations with
 census size `ns[g]` in generation `g`, e.g. a decline from the historical
-size to a breed-like size before founders are sampled (arm F5). The model is
-the same as in `fisher_wright` (dioecious WF, Poisson crossovers at `1/M` per
-bp, infinite-sites mutation at `mr / mut_base` per bp per meiosis), except
-that the population size may change every generation.
+size to a breed-like size before founders are sampled. This is
+`fisher_wright(...; init = res, popsize = ns)`: the same model (dioecious
+Wright–Fisher, Poisson crossovers at `1/M` per bp, infinite-sites mutation
+at `mr / mut_base` per bp per meiosis) with a census size that may change
+every generation.
 
-Runs on one thread with the explicit `rng`, so it is reproducible regardless
-of the thread count. Mutations that fix during the continuation stay in the
-haplotypes; `muts2bitarray` drops them as monomorphic.
+The result does not depend on the number of threads. Mutations that fix
+during the continuation move to `substitutions`, and the per-generation
+records of `res` are extended. An empty `ns` returns `res`.
 
-Uses FisherWright internals (`random_mate!`, `cobp!`, `recombine`,
-`merge_sorted`); `test/runtests.jl` guards that contract.
+Realizations for a given `rng` differ from BnGsim 0.1.0, which ran its own
+serial loop on FisherWright internals.
 """
 function continue_population(
     res::FisherWrightResult,
@@ -84,40 +93,20 @@ function continue_population(
     rng::AbstractRNG = Random.default_rng(),
 )
     all(>(1), ns) || throw(ArgumentError("every generation needs at least 2 individuals"))
-    cbp = res.chromosome_ends
-    chr = diff([0; Int.(cbp)])
-    rmap = uniform_recombination_map(chr; M = M)
-    p_mut = Poisson(Float64(cbp[end]) / mut_base * mr)
-    span = UInt32(1):cbp[end]
-
-    prt = res.active_haplotypes # read only; offspring are new vectors
-    co = UInt32[]
-    newm = UInt32[]
-    for n in ns
-        np = length(prt) ÷ 2
-        pm = Matrix{Int}(undef, n, 2)
-        FisherWright.random_mate!(pm, Vector{Bool}(undef, np), Int[], Int[]; rng = rng)
-        off = [UInt32[] for _ = 1:2n]
-        for i = 1:n
-            s, d = pm[i, 1], pm[i, 2]
-            FisherWright.recombine(prt[2s-1], prt[2s], off[2i-1],
-                FisherWright.cobp!(co, rmap; rng = rng); rng = rng)
-            FisherWright.recombine(prt[2d-1], prt[2d], off[2i],
-                FisherWright.cobp!(co, rmap; rng = rng); rng = rng)
-        end
-        for h in eachindex(off)
-            nm = rand(rng, p_mut)
-            nm == 0 && continue
-            resize!(newm, nm)
-            for k = 1:nm
-                newm[k] = rand(rng, span)
-            end
-            sort!(newm)
-            off[h] = FisherWright.merge_sorted(off[h], newm)
-        end
-        prt = off
-    end
-    return FisherWrightResult(prt, copy(cbp), copy(res.substitutions))
+    isempty(ns) && return res
+    chr = diff([0; Int.(res.chromosome_ends)])
+    return fisher_wright(
+        length(res.active_haplotypes) ÷ 2,
+        length(ns),
+        chr,
+        Float64(mr);
+        M = M,
+        mut_base = mut_base,
+        result = true,
+        init = res,
+        popsize = collect(Int, ns),
+        rng = rng,
+    )
 end
 
 """

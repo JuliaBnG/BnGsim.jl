@@ -8,7 +8,7 @@ out of Breeding.jl into BnGsim and left genetic evaluation and
 optimum-contribution selection in Breeding.jl.
 
 Upstream names cited below were checked against BnGStructs 0.2.7,
-FisherWright 0.6.0, RelationshipMatrices 0.6.1 and Breeding 0.2.0. If the
+FisherWright 0.7.0, RelationshipMatrices 0.6.1 and Breeding 0.2.1. If the
 installed packages disagree with this page, the installed packages win and
 this page is amended.
 
@@ -60,21 +60,23 @@ a dependency, and BnGsim does not aim for API compatibility with them.
 Sequence-level forward simulation belongs in FisherWright (or SLiM), not
 here.
 
-## 2. Current status (v0.1.0)
+## 2. Current status (v0.1.1)
 
 | Area | State |
 | :--- | :--- |
 | Founders | `historical_population`/`HistoricalSpec` wrap `fisher_wright`. `continue_population` extends a run. `founder_haplotypes` samples founders from a `FisherWrightResult`, a packed BNGH1 file, or xyBnG `BitMatrix` output. `sample_founder_population` returns a `FounderPopulation` built on `VariantMap` and `LocusSet`. |
 | Founder diagnostics | `founder_summary` (SFS, LD decay, chip/QTL MAF, VanRaden `G` statistics, implied `Mₑ`), `ld_decay`, `vanraden_g`. |
-| Meiosis | `crossovers` (Poisson, no interference, independent assortment), `gamete!` and `gene_drop`/`gene_drop!` on packed BnGStructs haplotypes. `random_mate`, `rnd_ped`, `expand`. |
+| Meiosis | `crossovers` (Poisson, no interference, independent assortment), `gamete!` and `gene_drop!` on packed BnGStructs haplotypes. `random_mate`, `rnd_ped`, `expand`. |
 | Sampling | `sample_id`, `sample_loci` (MAF-filtered chip and QTL `LocusSet`s). |
 | Traits | `eqtl` (single trait, and multi-trait with genetic correlation matrix), `norm_mv!`, `tbv!`, `phenotype!` (correlated residuals, sex-limited expression, threshold traits from a liability scale), `dummy_traits`. |
 | Provenance | `provenance` (Breeding is listed when loaded) writes a text header with the date, host, CPU, threads, seed and package versions/commits. This partly covers I2: there is no JSON manifest yet. |
 | Not started | Scenario schema, `SimKey`, `IndividualStore`/`PedigreeView`, selection and evaluation loop, lifecycle, checkpoints, CLI, adapter layer. |
 
-All randomness takes an explicit `rng`. Runs reproduce exactly for a given
-seed only at a fixed thread count, because FisherWright and the threaded
-kernels here use task-local streams. Section 3.2 removes that limit.
+All randomness takes an explicit `rng`. FisherWright (0.4 and later) and
+`gene_drop!` seed one stream per haplotype from `rng`, so founders and
+gene drop do not depend on the thread count. What is still missing for
+invariant I1 is keying by simulation coordinate (§4.2): today a draw
+depends on the order of the calls that precede it.
 
 ## 3. Design invariants
 
@@ -123,10 +125,8 @@ base for each dependency. All upstream calls go through `src/adapters/`,
 one thin module per dependency, each with a contract test. Serialized
 manifests and result tables use types that BnGsim owns.
 
-*Known debt:* `continue_population` calls the unexported FisherWright
-internals `random_mate!`, `cobp!`, `recombine` and `merge_sorted`. In
-FisherWright 0.6, `fisher_wright(...; init = res)` continues a run through
-the public API, and `continue_population` should be rewritten to use it.
+As of v0.1.1 BnGsim calls no unexported FisherWright function:
+`continue_population` is `fisher_wright(...; init = res, popsize = ns)`.
 
 ### 4.2 Counter-based keyed PRNG (`SimKey`)
 
@@ -269,8 +269,8 @@ Each phase ends with an exit gate. Phases 2 and 3 are partly done (see §2).
 
 1. CLI skeleton, `SimKey`, and a JSON provenance block that extends the
    current `provenance` header.
-2. `docs/upstream-contract.md` and the first `src/adapters/` modules. Remove
-   the FisherWright-internal calls (§4.1).
+2. `docs/upstream-contract.md` and the first `src/adapters/` modules. (The
+   FisherWright-internal calls were removed in v0.1.1.)
 3. A minimal scenario: small genome, one additive trait, random mating,
    phenotypic truncation, 3 generations.
 4. A benchmark harness on the smoke scenario, with a recorded baseline.
