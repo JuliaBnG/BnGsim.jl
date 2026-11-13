@@ -83,12 +83,11 @@ end
         gt[:, 2] .= false
         hap0 = Haplotype(gt)
         frq0 = Float32.(vec(mean(gt; dims = 2)))
+        # chromosome labels follow from the genome-wide positions and the species
         vm0 = VariantMap(
-            vcat(fill(Int8(1), 64), fill(Int8(2), 64)),
             UInt32.(round.(Int, range(1_000, 1_900_000; length = nlc))),
-            fill('A', nlc),
-            fill('C', nlc),
-            frq0,
+            sp_toy;
+            frq = frq0,
         )
 
         # sum_map
@@ -114,6 +113,11 @@ end
         og2 = Haplotype(nlc, 32)
         df_cp1 = gene_drop!(og1, hap0, pm, sp_toy, vm0; rng = MersenneTwister(104))
         df_cp2 = gene_drop!(og2, hap0, pm, sp_toy, vm0; rng = MersenneTwister(104))
+        # A map that is not on the genome of the species is refused: here every
+        # variant is labelled chromosome 1, although half lie on chromosome 2.
+        vm_bad = VariantMap(fill(Int8(1), nlc), vm0.pos, vm0.ref, vm0.alt)
+        @test_throws ArgumentError gene_drop!(og2, hap0, pm, sp_toy, vm_bad; rng = MersenneTwister(104))
+        @test_throws ArgumentError crossovers(sp_toy, vm_bad)
         @test og1.gt == og2.gt
         @test nrow(df_cp1) == 32
 

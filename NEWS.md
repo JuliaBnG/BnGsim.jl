@@ -1,5 +1,18 @@
 # BnGsim.jl release notes
 
+## v0.1.2 (unreleased)
+
+Requires BnGStructs 0.3.
+
+- `gene_drop!(og, pg, pm, species, map)`, `crossovers(species, map)` and
+  `expand` check that the `VariantMap` is on the genome of the species
+  (`BnGStructs.check_coordinates`). A map with within-chromosome
+  positions used to give wrong recombinants without an error.
+- `read_packed_haplotypes` reads through `BnGStructs.read_haplotypes`,
+  which now owns the `BNGH1` format; its result is unchanged.
+- Record columns are named through `BnGStructs.trait_columns`; the names
+  (`tbv_<trait>`, `ft_<trait>`) are unchanged.
+
 ## v0.1.1 (unreleased)
 
 - Works with FisherWright 0.6 and 0.7.

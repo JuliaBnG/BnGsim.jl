@@ -86,8 +86,10 @@ function crossovers(
     return gcvs, mcps
 end
 
-crossovers(sp::Species, vm::VariantMap; rng::AbstractRNG = Random.default_rng()) =
-    crossovers(sum_map(sp), vm.pos; rng = rng)
+function crossovers(sp::Species, vm::VariantMap; rng::AbstractRNG = Random.default_rng())
+    check_coordinates(vm, sp)
+    return crossovers(sum_map(sp), vm.pos; rng = rng)
+end
 
 """
     gamete!(
@@ -219,6 +221,7 @@ function gene_drop!(
     vm::VariantMap;
     rng::AbstractRNG = Random.default_rng(),
 )
+    check_coordinates(vm, sp)
     return gene_drop!(og.gt, pg.gt, pm, sum_map(sp), vm.pos; rng = rng)
 end
 
@@ -346,6 +349,7 @@ function expand(
     t >= 1 || throw(ArgumentError("t must be at least 1"))
     n_t >= 2 || throw(ArgumentError("n_t must be at least 2"))
 
+    check_coordinates(vm, sp)
     lms = sum_map(sp)
     p = (n_t / n0)^(1 / t)
     prt = copy(hap.gt)

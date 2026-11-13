@@ -1,6 +1,6 @@
 name = "BnGsim"
 uuid = "fa058a0c-7e86-4bcb-95e5-acc93d12197f"
-version = "0.1.1"
+version = "0.1.2"
 authors = ["Xijiang Yu <xijiang@users.noreply.github.com>"]
 license = "MIT"
 docs = "https://juliabng.github.io/BnGsim/"
@@ -23,7 +23,7 @@ StatsBase = "2913bbd2-ae8a-5f71-8c99-4fb6c76f3a91"
 
 [compat]
 Aqua = "0.8"
-BnGStructs = "0.2.7"
+BnGStructs = "0.3"
 DataFrames = "1"
 Dates = "1"
 Distributions = "0.25"
