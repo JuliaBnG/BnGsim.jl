@@ -8,7 +8,7 @@ BnGsim.jl simulates breeding programs in the JuliaBnG ecosystem. Version
   (`founder_haplotypes`, `sample_founder_population`), and readers and
   writers for packed haplotype files.
 - **Meiosis:** Poisson crossovers without interference, `gamete!` and
-  `gene_drop` on packed BnGStructs `Haplotype`s, `random_mate`, `rnd_ped`.
+  `gene_drop!` on packed BnGStructs `Haplotype`s, `random_mate`, `rnd_ped`.
 - **Traits:** QTL sampling (`sample_loci`, `eqtl`), true breeding values
   (`tbv!`), and phenotypes with correlated residuals, sex-limited expression
   and threshold traits (`phenotype!`).

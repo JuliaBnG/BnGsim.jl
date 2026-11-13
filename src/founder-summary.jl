@@ -104,20 +104,17 @@ end
 
 VanRaden (2008) method-1 genomic relationships among the individuals of `xy`
 (columns `2i-1`, `2i`) at `loci`, centred on the allele frequencies of the
-same individuals: `G = ZZ' / 2Σpq`.
+same individuals: `G = ZZ' / 2Σpq`. Computed by `RelationshipMatrices.grm`.
 """
 function vanraden_g(xy::AbstractMatrix{Bool}, loci::AbstractVector{<:Integer})
     nid = size(xy, 2) ÷ 2
-    Z = Matrix{Float64}(undef, nid, length(loci))
-    Threads.@threads for k in eachindex(loci)
-        l = loci[k]
-        @inbounds for i = 1:nid
-            Z[i, k] = xy[l, 2i-1] + xy[l, 2i]
+    Z = Matrix{Int8}(undef, length(loci), nid)
+    Threads.@threads for i = 1:nid
+        @inbounds for (k, l) in enumerate(loci)
+            Z[k, i] = Int8(xy[l, 2i-1]) + Int8(xy[l, 2i])
         end
     end
-    p = vec(mean(Z; dims = 1)) ./ 2
-    Z .-= 2p'
-    return (Z * Z') ./ (2sum(p .* (1 .- p)))
+    return grm(Z)
 end
 
 """

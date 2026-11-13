@@ -1,9 +1,14 @@
 using Test
+using Aqua
 using BnGsim
 using BnGStructs
 using Distributions
 using DataFrames
 using Random
+
+@testset "Aqua" begin
+    Aqua.test_all(BnGsim)
+end
 
 @testset "BnGsim Founder Population Tests" begin
     # Fast test with small species
@@ -165,7 +170,7 @@ end
     @test res isa FisherWrightResult
     @test length(res.active_haplotypes) == 200
 
-    # Decline to 20 then 10 individuals; FisherWright internals contract.
+    # Decline to 20 then 10 individuals through `fisher_wright(; init, popsize)`.
     rng = MersenneTwister(2)
     dec = continue_population(res, [20, 10], 5.0; M = spec.M, rng = rng)
     @test length(dec.active_haplotypes) == 20
@@ -175,6 +180,27 @@ end
     # Same rng state gives the same population.
     dec2 = continue_population(res, [20, 10], 5.0; M = spec.M, rng = MersenneTwister(2))
     @test dec2.active_haplotypes == dec.active_haplotypes
+    @test dec.census[end-2:end] == [spec.ne, 20, 10]
+    @test continue_population(res, Int[], 5.0) === res
+    @test_throws ArgumentError continue_population(res, [20, 1], 5.0)
+    # A seed and the stream it starts are the same request, and the stream of
+    # the global RNG is not consumed.
+    Random.seed!(99)
+    next_draw = rand(UInt64)
+    Random.seed!(99)
+    h1 = historical_population(spec; seed = 11)
+    h2 = historical_population(spec; rng = Xoshiro(11))
+    @test h1.active_haplotypes == h2.active_haplotypes
+    @test rand(UInt64) == next_draw
+    @test_throws ArgumentError historical_population(spec)
+    @test_throws ArgumentError historical_population(spec; seed = 1, rng = Xoshiro(1))
+    # vanraden_g against the definition
+    let xyg = rand(MersenneTwister(8), Bool, 120, 30), lc = collect(1:2:120)
+        Zg = [xyg[l, 2i-1] + xyg[l, 2i] for i = 1:15, l in lc] .+ 0.0
+        pg = vec(sum(Zg; dims = 1)) ./ 30
+        Zg .-= 2pg'
+        @test vanraden_g(xyg, lc) ≈ (Zg * Zg') ./ (2sum(pg .* (1 .- pg)))
+    end
 
     xy, lmp = founder_haplotypes(res, 50; rng = MersenneTwister(3))
     @test size(xy, 2) == 100
