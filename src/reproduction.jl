@@ -18,7 +18,13 @@ function sum_map(chr_len::AbstractVector{<:Integer}; M::Real = 1e8)
     )
 end
 
-sum_map(sp::Species) = sum_map(sp.chromosome; M = sp.M)
+# Genetic lengths come from the species (`map_length`), which defaults to
+# `chromosome ./ M` and may be set per chromosome.
+sum_map(sp::Species) = DataFrame(
+    chr = Int8.(1:length(sp)),
+    len = copy(map_length(sp)),
+    ebp = copy(cbp(sp)),
+)
 
 function sum_map(vm::VariantMap; cM::Real = 1e6)
     lms = DataFrame(
@@ -86,8 +92,10 @@ function crossovers(
     return gcvs, mcps
 end
 
-crossovers(sp::Species, vm::VariantMap; rng::AbstractRNG = Random.default_rng()) =
-    crossovers(sum_map(sp), vm.pos; rng = rng)
+function crossovers(sp::Species, vm::VariantMap; rng::AbstractRNG = Random.default_rng())
+    check_coordinates(vm, sp)
+    return crossovers(sum_map(sp), vm.pos; rng = rng)
+end
 
 """
     gamete!(
@@ -219,6 +227,7 @@ function gene_drop!(
     vm::VariantMap;
     rng::AbstractRNG = Random.default_rng(),
 )
+    check_coordinates(vm, sp)
     return gene_drop!(og.gt, pg.gt, pm, sum_map(sp), vm.pos; rng = rng)
 end
 
@@ -346,6 +355,7 @@ function expand(
     t >= 1 || throw(ArgumentError("t must be at least 1"))
     n_t >= 2 || throw(ArgumentError("n_t must be at least 2"))
 
+    check_coordinates(vm, sp)
     lms = sum_map(sp)
     p = (n_t / n0)^(1 / t)
     prt = copy(hap.gt)
