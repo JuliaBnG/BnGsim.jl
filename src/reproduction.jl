@@ -44,7 +44,7 @@ function sum_map(vm::VariantMap; cM::Real = 1e6)
     return lms
 end
 
-const sumMap = sum_map
+Base.@deprecate_binding sumMap sum_map
 
 """
     crossovers(lms::DataFrame, tbp::AbstractVector{<:Integer}; rng::AbstractRNG = Random.default_rng()) -> (Vector{UInt32}, Vector{Int32})
@@ -134,9 +134,9 @@ end
         vm::VariantMap;
         rng::AbstractRNG = Random.default_rng(),
     ) -> DataFrame
-    gene_drop(
-        pg::AbstractMatrix,
+    gene_drop!(
         og::AbstractMatrix,
+        pg::AbstractMatrix,
         pm::AbstractMatrix{<:Integer},
         lms::DataFrame,
         tbp::AbstractVector{<:Integer};
@@ -149,9 +149,9 @@ according to the `nf × 2` parent matrix `pm` (`[sire dam]` per offspring).
 Uses per-offspring `Xoshiro` streams seeded deterministically from `rng`, so results are
 invariant to `Threads.nthreads()`. Returns a `DataFrame` of crossover records (`generation`, `parent`, `ihap`, `crossovers`).
 """
-function gene_drop(
-    pg::AbstractMatrix,
+function gene_drop!(
     og::AbstractMatrix,
+    pg::AbstractMatrix,
     pm::AbstractMatrix{<:Integer},
     lms::DataFrame,
     tbp::AbstractVector{<:Integer};
@@ -219,7 +219,29 @@ function gene_drop!(
     vm::VariantMap;
     rng::AbstractRNG = Random.default_rng(),
 )
-    return gene_drop(pg.gt, og.gt, pm, sum_map(sp), vm.pos; rng = rng)
+    return gene_drop!(og.gt, pg.gt, pm, sum_map(sp), vm.pos; rng = rng)
+end
+
+"""
+    gene_drop(pg, og, pm, lms, tbp; rng)
+
+Deprecated: use `gene_drop!(og, pg, pm, lms, tbp; rng)`, which names the
+mutation of `og` and takes the offspring first, as the `Haplotype`
+method does.
+"""
+function gene_drop(
+    pg::AbstractMatrix,
+    og::AbstractMatrix,
+    pm::AbstractMatrix{<:Integer},
+    lms::DataFrame,
+    tbp::AbstractVector{<:Integer};
+    rng::AbstractRNG = Random.default_rng(),
+)
+    Base.depwarn(
+        "`gene_drop(pg, og, …)` is deprecated; use `gene_drop!(og, pg, …)`.",
+        :gene_drop,
+    )
+    return gene_drop!(og, pg, pm, lms, tbp; rng = rng)
 end
 
 """
@@ -338,7 +360,7 @@ function expand(
             rand!(rng, sex_p)
         end
         pm = random_mate(sex_p, ni; rng = rng)
-        cp = gene_drop(prt, off, pm, lms, vm.pos; rng = rng)
+        cp = gene_drop!(off, prt, pm, lms, vm.pos; rng = rng)
         cp.generation .= Int16(i)
         append!(cps, cp)
         prt = off
@@ -394,7 +416,7 @@ function sample_id(
     return Haplotype(sub_gt[vld, :]), vm_out
 end
 
-const sampleID = sample_id
+Base.@deprecate_binding sampleID sample_id
 
 """
     sample_loci(
@@ -441,4 +463,4 @@ function sample_loci(
     return out
 end
 
-const sampleLoci = sample_loci
+Base.@deprecate_binding sampleLoci sample_loci

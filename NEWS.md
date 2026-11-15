@@ -1,5 +1,25 @@
 # BnGsim.jl release notes
 
+## v0.1.1 (unreleased)
+
+- Works with FisherWright 0.6 and 0.7.
+- `historical_population` takes `rng` as an alternative to `seed` and no
+  longer seeds the global RNG. A given `seed` gives the same population
+  as in v0.1.0.
+- `continue_population` runs through `fisher_wright(; init, popsize)`
+  instead of a serial loop on FisherWright internals. It is threaded,
+  its result does not depend on the thread count, mutations that fix go
+  to `substitutions`, and the per-generation records are extended.
+  **Realizations for a given `rng` differ from v0.1.0.** `mr` is now
+  subject to FisherWright's bounds (0.01 < `mr` < 20).
+- `vanraden_g` is computed by `RelationshipMatrices.grm`; values agree
+  with v0.1.0 to rounding.
+- `gene_drop!(og, pg, pm, lms, tbp)` is the matrix method of gene drop.
+  `gene_drop(pg, og, …)`, which mutated `og` without saying so, is
+  deprecated, as are the camel-case aliases `sumMap`, `sampleID` and
+  `sampleLoci`.
+- The tests run Aqua.jl.
+
 ## v0.1.0
 
 First registered release. It supports Julia 1.10 (LTS) through 1.13 and
