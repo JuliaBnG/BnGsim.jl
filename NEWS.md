@@ -2,9 +2,12 @@
 
 ## v0.1.2 (unreleased)
 
-Requires BnGStructs 0.3 and FisherWright 0.7.1 (the first FisherWright
-release that allows BnGStructs 0.3); works with RelationshipMatrices 0.6.1
-and 0.7.
+Requires BnGStructs 0.3 and FisherWright 0.7.1 or 0.8 (0.7.1 is the first
+FisherWright release that allows BnGStructs 0.3); works with
+RelationshipMatrices 0.6.1 and 0.7.
+
+- The roadmap link in the README points to the deployed page
+  (`…/BnGsim/dev/roadmap/`).
 
 - `gene_drop!(og, pg, pm, species, map)`, `crossovers(species, map)` and
   `expand` check that the `VariantMap` is on the genome of the species
