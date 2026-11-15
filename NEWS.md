@@ -1,6 +1,6 @@
 # BnGsim.jl release notes
 
-## v0.1.2 (unreleased)
+## v0.1.2 (2026-11-15)
 
 Requires BnGStructs 0.3 and FisherWright 0.7.1 or 0.8 (0.7.1 is the first
 FisherWright release that allows BnGStructs 0.3); works with
@@ -21,7 +21,7 @@ RelationshipMatrices 0.6.1 and 0.7.
 - Record columns are named through `BnGStructs.trait_columns`; the names
   (`tbv_<trait>`, `ft_<trait>`) are unchanged.
 
-## v0.1.1 (unreleased)
+## v0.1.1 (not registered; released as part of v0.1.2)
 
 - Works with FisherWright 0.6 and 0.7.
 - `historical_population` takes `rng` as an alternative to `seed` and no
