@@ -24,5 +24,5 @@ fp  = sample_founder_population(Cattle(100); n_id = 20, n_marker = 500, n_qtl = 
                                 h2 = 0.3, burnin_generations = 200, rng = rng)
 ```
 
-The development plan is in the [roadmap](https://juliabng.github.io/BnGsim/roadmap/).
+The development plan is in the [roadmap](https://juliabng.github.io/BnGsim/dev/roadmap/).
 Release notes are in [`NEWS.md`](NEWS.md).

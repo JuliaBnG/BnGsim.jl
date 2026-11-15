@@ -7,8 +7,8 @@ reorganization of the JuliaBnG ecosystem, which moved forward simulation
 out of Breeding.jl into BnGsim and left genetic evaluation and
 optimum-contribution selection in Breeding.jl.
 
-Upstream names cited below were checked against BnGStructs 0.2.7,
-FisherWright 0.7.0, RelationshipMatrices 0.6.1 and Breeding 0.2.1. If the
+Upstream names cited below were checked against BnGStructs 0.3.0,
+FisherWright 0.8.0, RelationshipMatrices 0.7.0 and Breeding 0.3.0. If the
 installed packages disagree with this page, the installed packages win and
 this page is amended.
 
@@ -60,7 +60,7 @@ a dependency, and BnGsim does not aim for API compatibility with them.
 Sequence-level forward simulation belongs in FisherWright (or SLiM), not
 here.
 
-## 2. Current status (v0.1.1)
+## 2. Current status (v0.1.2)
 
 | Area | State |
 | :--- | :--- |
@@ -125,7 +125,7 @@ base for each dependency. All upstream calls go through `src/adapters/`,
 one thin module per dependency, each with a contract test. Serialized
 manifests and result tables use types that BnGsim owns.
 
-As of v0.1.1 BnGsim calls no unexported FisherWright function:
+As of v0.1.2 BnGsim calls no unexported FisherWright function:
 `continue_population` is `fisher_wright(...; init = res, popsize = ns)`.
 
 ### 4.2 Counter-based keyed PRNG (`SimKey`)
@@ -270,7 +270,7 @@ Each phase ends with an exit gate. Phases 2 and 3 are partly done (see §2).
 1. CLI skeleton, `SimKey`, and a JSON provenance block that extends the
    current `provenance` header.
 2. `docs/upstream-contract.md` and the first `src/adapters/` modules. (The
-   FisherWright-internal calls were removed in v0.1.1.)
+   FisherWright-internal calls were removed in v0.1.2.)
 3. A minimal scenario: small genome, one additive trait, random mating,
    phenotypic truncation, 3 generations.
 4. A benchmark harness on the smoke scenario, with a recorded baseline.

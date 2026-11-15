@@ -28,18 +28,7 @@ function norm_mv!(
 end
 
 # Extract nqtl × nid Int8 dosage matrix at `loci` from a Haplotype
-function _qtl_dosage_matrix(hap::Haplotype, loci::AbstractVector{<:Integer})
-    nid = hap.nhp ÷ 2
-    nqtl = length(loci)
-    Q = Matrix{Int8}(undef, nqtl, nid)
-    Threads.@threads for i = 1:nid
-        c1, c2 = 2i - 1, 2i
-        @inbounds for (k, l) in enumerate(loci)
-            Q[k, i] = Int8(hap.gt[l, c1]) + Int8(hap.gt[l, c2])
-        end
-    end
-    return Q
-end
+_qtl_dosage_matrix(hap::Haplotype, loci::AbstractVector{<:Integer}) = dosage(hap, loci)
 
 """
     eqtl(
@@ -111,7 +100,7 @@ function tbv!(ped::DataFrame, hap::Union{Haplotype,Genotype}, qtl::TraitQTL)
     vals = tbv(hap, qtl)
     nrow(ped) == length(vals) ||
         throw(DimensionMismatch("ped has $(nrow(ped)) rows, hap has $(length(vals)) individuals"))
-    ped[!, "tbv_" * qtl.name] = vals
+    ped[!, trait_columns(qtl.name).tbv] = vals
     return ped
 end
 
@@ -120,7 +109,7 @@ function tbv!(ped::DataFrame, hap::Union{Haplotype,Genotype}, mqtl::MultiTraitQT
     nrow(ped) == size(vals, 1) ||
         throw(DimensionMismatch("ped has $(nrow(ped)) rows, hap has $(size(vals, 1)) individuals"))
     for (j, name) in enumerate(mqtl.trait_names)
-        ped[!, "tbv_" * name] = vals[:, j]
+        ped[!, trait_columns(name).tbv] = vals[:, j]
     end
     return ped
 end
@@ -171,7 +160,7 @@ function phenotype!(
 
     has_sex = hasproperty(ped, :sex)
     for (j, t) in enumerate(trts)
-        gt = ped[!, "tbv_" * t.name]
+        gt = ped[!, trait_columns(t).tbv]
         ft = Vector{Union{Missing,Float64}}(undef, nid)
         @inbounds for i = 1:nid
             ft[i] = gt[i] + E[i, j]
@@ -194,14 +183,14 @@ function phenotype!(
                     tt[i] = isnothing(idx) ? Int8(nt_cat) : Int8(idx - 1)
                 end
             end
-            ped[!, "ft_" * t.name] = tt
+            ped[!, trait_columns(t).phenotype] = tt
         else
             for i = 1:nid
                 if !ismissing(ft[i])
                     ft[i] = ft[i] + t.μ
                 end
             end
-            ped[!, "ft_" * t.name] = ft
+            ped[!, trait_columns(t).phenotype] = ft
         end
     end
     return ped

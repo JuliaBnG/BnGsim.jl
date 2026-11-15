@@ -201,25 +201,8 @@ function read_packed_haplotypes(
     cbp::AbstractVector{<:Integer};
     rng::AbstractRNG = Random.default_rng(),
 )
-    xy, pos = open(path) do io
-        read(io, 8) == UInt8['B', 'N', 'G', 'H', '1', 0, 0, 0] || error("$path is not a BNGH1 file")
-        nlc, nhp = read(io, Int), read(io, Int)
-        (nhp > 0 && iseven(nhp)) || error("nhap = $nhp must be positive and even")
-        pos = Vector{UInt32}(undef, nlc)
-        read!(io, pos)
-        nb = cld(nhp, 8)
-        packed = Matrix{UInt8}(undef, nb, nlc)
-        read!(io, packed)
-        xy = falses(nlc, nhp)
-        for h = 1:nhp
-            b, s = ((h - 1) >>> 3) + 1, (h - 1) & 7
-            col = view(xy, :, h)
-            @inbounds for l = 1:nlc
-                col[l] = (packed[b, l] >>> s) & 0x01 == 0x01
-            end
-        end
-        xy, pos
-    end
+    hap, pos = read_haplotypes(path)        # BnGStructs owns the BNGH1 format
+    xy = packed(hap)[1:hap.nlc, :]
     frq = vec(sum(xy; dims = 2)) ./ size(xy, 2)
     keep = findall(f -> 0 < f < 1, frq)
     ord = keep[sortperm(pos[keep])]

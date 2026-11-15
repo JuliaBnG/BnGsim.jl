@@ -83,16 +83,29 @@ end
         gt[:, 2] .= false
         hap0 = Haplotype(gt)
         frq0 = Float32.(vec(mean(gt; dims = 2)))
+        # chromosome labels follow from the genome-wide positions and the species
         vm0 = VariantMap(
-            vcat(fill(Int8(1), 64), fill(Int8(2), 64)),
             UInt32.(round.(Int, range(1_000, 1_900_000; length = nlc))),
-            fill('A', nlc),
-            fill('C', nlc),
-            frq0,
+            sp_toy;
+            frq = frq0,
         )
 
         # sum_map
         lms_sp = sum_map(sp_toy)
+        # default map: identical to the uniform one; per-chromosome lengths are honoured
+        @test lms_sp == sum_map(sp_toy.chromosome; M = sp_toy.M)
+        sp_len = GenericSpecies("toy", 20, [1_000_000, 1_000_000]; morgan = [0.5, 2.0])
+        @test sum_map(sp_len).len == [0.5, 2.0]
+        # Crossover counts per chromosome are Poisson with the stated lengths:
+        # 400 meioses, means 0.5 and 2.0, tolerance 4 standard errors.
+        n1 = n2 = 0
+        for seed = 1:400
+            pts = crossovers(sp_len, vm0; rng = MersenneTwister(seed))[1][2:end]
+            n1 += count(p -> p < 1_000_000, pts)                 # chromosome ends mark assortment
+            n2 += count(p -> 1_000_000 < p < 2_000_000, pts)
+        end
+        @test abs(n1 / 400 - 0.5) < 4 * sqrt(0.5 / 400)
+        @test abs(n2 / 400 - 2.0) < 4 * sqrt(2.0 / 400)
         @test nrow(lms_sp) == 2
         lms_vm = sum_map(vm0)
         @test nrow(lms_vm) == 2 && sum(lms_vm.nlc) == nlc
@@ -114,6 +127,11 @@ end
         og2 = Haplotype(nlc, 32)
         df_cp1 = gene_drop!(og1, hap0, pm, sp_toy, vm0; rng = MersenneTwister(104))
         df_cp2 = gene_drop!(og2, hap0, pm, sp_toy, vm0; rng = MersenneTwister(104))
+        # A map that is not on the genome of the species is refused: here every
+        # variant is labelled chromosome 1, although half lie on chromosome 2.
+        vm_bad = VariantMap(fill(Int8(1), nlc), vm0.pos, vm0.ref, vm0.alt)
+        @test_throws ArgumentError gene_drop!(og2, hap0, pm, sp_toy, vm_bad; rng = MersenneTwister(104))
+        @test_throws ArgumentError crossovers(sp_toy, vm_bad)
         @test og1.gt == og2.gt
         @test nrow(df_cp1) == 32
 
