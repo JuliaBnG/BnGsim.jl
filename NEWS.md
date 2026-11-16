@@ -1,6 +1,6 @@
 # BnGsim.jl release notes
 
-## v0.8.0 (unreleased)
+## v0.8.0 (2026-11-17)
 
 Sixth part of M3: optimum contribution selection with a target rate of
 inbreeding, for overlapping generations, and a comparison of three
