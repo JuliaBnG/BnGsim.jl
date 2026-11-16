@@ -1,0 +1,6 @@
+# validation/reml-overlap.jl on amd (Ryzen 9 5950X), 2026-11-16, BnGsim 0.6.0 + m3-survival, Julia 1.13.4, 16 threads, 50 replicates per configuration; σ²a true 1.
+age1 max2 trunc 300    σ²a mean 0.9797 s.e. 0.0186
+age1 max2 random 300   σ²a mean 0.9876 s.e. 0.0224
+age1 max2 trunc 2900   σ²a mean 1.0032 s.e. 0.0174
+age1 max0 trunc 300    σ²a mean 0.9973 s.e. 0.0265
+age0 max2 trunc 300    σ²a mean 0.9659 s.e. 0.0164
