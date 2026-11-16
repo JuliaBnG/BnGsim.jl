@@ -1,6 +1,6 @@
 # BnGsim.jl release notes
 
-## v0.6.0 (unreleased)
+## v0.6.0 (2026-11-16)
 
 Fourth part of M3: several traits, selection on an index.
 
