@@ -1,5 +1,77 @@
 # BnGsim.jl release notes
 
+## v0.8.0 (unreleased)
+
+Sixth part of M3: optimum contribution selection with a target rate of
+inbreeding, for overlapping generations, and a comparison of three
+constraints.
+
+### Breaking
+
+- `select_parents` returns a fifth element, `info` (empty unless a
+  dynamic OCS constraint is used); code destructuring four values is
+  unaffected.
+
+### New
+
+- `Scheme(; selection = :ocs, ocs, ΔF)`: OCS holding the rate of
+  inbreeding at `ΔF` per generation. The bound on the constrained kinship
+  rises from 1/(2n₀) by 1 − (1 − ΔF)^(1/L) per step.
+  - `ocs = :cohort`: mean kinship of the newborn cohort, c'Θc; L estimated
+    from the parental ages used so far.
+  - `ocs = :age_year` (Meuwissen & Sonesson 1998; Wellmann 2019, optiSel):
+    mean kinship of the population at the next step, w = W₀c + v, age
+    classes weighted by their remaining expected contributions (estimated
+    from realised usage), equal weights within a class; L as for
+    `:cohort`.
+  - `ocs = :age_generation`: the same with L the generation interval of
+    the contributions being chosen, iterated to a fixed point (a
+    per-generation constraint, Sonesson et al. 2000).
+  - `ocs = :fixed` (default): `TM1997` with a fixed `K`, as before.
+  - With discrete generations the three dynamic constraints coincide.
+  - Summaries report `ocs_bound`, `ocs_kinship`, `ocs_L`, `ocs_feasible`.
+- `ocs_contributions(u, Θ, b, K, male)`: OCS with a linear term in the
+  constraint, solved exactly by homotopy in the weight of the gain from
+  the best male and female down to the bound (or to the minimum of the
+  kinship, flagged infeasible). The free set stays as small as the number
+  of parents, so a step costs well under a second with hundreds of
+  candidates.
+
+### Validation
+
+- Tests: KKT conditions of the solver at several bounds, with and without
+  the linear term, and at the infeasible minimum; agreement with
+  `TM1997` where its solution has no negative contributions; age weights
+  summing to 1; the reported kinship equal to w'Θw recomputed; the
+  per-generation fixed point; the three constraints identical with
+  discrete generations, with the bound 1 − (1 − 1/2n₀)(1 − ΔF)^t.
+- `validation/ocs-overlap.jl`: the three constraints and truncation,
+  100 paired replicates per scenario, 20 steps, parents of ages 0–3,
+  PBLUP, target ΔF = 0.01 per generation
+  (`validation/results/ocs-overlap-2026-11-16.txt`, per-replicate CSVs):
+
+  | scenario | method | ΔF/gen | gain/year | L | parents |
+  | :--- | :--- | :--- | :--- | :--- | :--- |
+  | records at birth | cohort | 0.0103 | 0.280 | 1.27 | 63 |
+  | | age_year | 0.0104 | 0.271 | 1.28 | 59 |
+  | | age_generation | 0.0100 | 0.282 | 1.29 | 60 |
+  | | truncation | 0.0499 | 0.206 | 1.28 | 33 |
+  | records at age 1 | cohort | 0.0107 | 0.219 | 2.36 | 61 |
+  | | age_year | 0.0109 | 0.220 | 2.19 | 43 |
+  | | age_generation | 0.0104 | 0.229 | 2.19 | 44 |
+  | | truncation | 0.0585 | 0.205 | 1.66 | 33 |
+
+  Standard errors are about 0.0001 for ΔF and 0.004–0.005 for gain.
+  All three constraints hold ΔF within 10 % of the target; truncation
+  without control is 5–6 times above it. `:age_generation` comes closest
+  (0.0100 and 0.0104) and gives the most gain: +0.012 (s.e. 0.005) and
+  +0.010 (0.004) per year over `:age_year` (paired). `:cohort` and
+  `:age_year` give the same gain, but with records at age 1 `:cohort`
+  uses older parents (L 2.36 against 2.19) and more of them. The
+  differences between the constraints are small next to their common
+  advantage over truncation, in gain per year as well as in ΔF over this
+  horizon.
+
 ## v0.7.0 (2026-11-16)
 
 Fifth part of M3: survival, culling and single-step GBLUP.
