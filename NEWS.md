@@ -1,5 +1,62 @@
 # BnGsim.jl release notes
 
+## v0.5.0 (unreleased)
+
+Third part of M3: overlapping generations, sex- and age-limited records,
+re-estimated variance components and checkpoints.
+
+### Breaking
+
+- A trait expressed in one sex (`Trait(...; sex = 0)` or `1`) now leaves
+  the phenotypes of the other sex `NaN` in `founder_population` and
+  `step!`; they used to be recorded in both sexes. The values drawn for
+  the expressing sex are unchanged (each animal has its own keyed
+  stream).
+- A trait's `age` must be a whole number of time steps.
+- `Population` has a new field `vc`; `step!` and `simulate!` return the
+  extra columns `L`, `va`, `ve`.
+
+### New
+
+- `Scheme(; max_sire_age, max_dam_age)`: parents are chosen among all
+  animals of age at most these (in time steps; `0`, the default, gives
+  discrete generations), ranked on one criterion. `:ocs` and `:rocs`
+  take candidates of all eligible ages, without age-class weighting of
+  contributions. `step!` reports the generation interval `L`.
+- Records follow the trait: `trait.sex` limits them to one sex,
+  `trait.age` delays their use in evaluations; `recorded(pop, t)` lists
+  those available at step `t`, `current_step(pop)` the step.
+- `Scheme(; reml = true)`: σ²a and σ²e re-estimated by AI-REML
+  (Breeding.jl) before every PBLUP or GBLUP evaluation, starting from the
+  previous estimates, once a recorded animal has a known parent; a run
+  stops if REML does not converge. The components used are reported as
+  `va` and `ve`.
+- `save_checkpoint`, `load_checkpoint`, `simulate!(...; checkpoint)`: a
+  run resumed from a checkpoint is identical to an uninterrupted one. The
+  file uses Julia's `Serialization` and is refused by another BnGsim or
+  Julia version unless `strict = false`: it is for resuming runs, not for
+  archiving.
+
+### Validation
+
+- Tests: selection by age limits against a brute-force ranking; the
+  generation interval; PBLUP with female records only against a dense
+  solve; records available from an age; REML in the loop against an
+  independent call; checkpoint–resume equal to an uninterrupted run
+  (with REML and overlapping generations); discrete generations and the
+  golden run unchanged.
+- `validation/reml.jl`: REML estimates under selection against the
+  founder values, 300 replicates (amd, 2026-11-16,
+  `validation/results/reml-2026-11-16.txt`). Under truncation on EBV,
+  σ̂²a = 0.986 (s.e. 0.007) and σ̂²e = 2.321 (0.006), against 1 and 2.333;
+  under random selection, 1.009 (0.009) and 2.325 (0.007). The gate
+  (|bias| < 3 s.e.) passes for both. Under selection both estimates sit
+  about 2 s.e. low (selection − random for σ²a: −0.023, s.e. 0.012),
+  which suggests a small bias of 1–2 % not shown at this precision. A bias
+  of that size is expected with 300 QTL: the unbiasedness of REML under
+  selection holds for the infinitesimal model, and selection here also
+  changes allele frequencies.
+
 ## v0.4.0 (2026-11-16)
 
 The breeding loop (second part of M3): discrete generations of one

@@ -21,6 +21,7 @@ const GOLDEN_LOOP = 0x78a0a38d4a0288cb
 include("keys.jl")
 include("meiosis.jl")
 include("loop.jl")
+include("lifecycle.jl")
 
 @testset "Aqua" begin
     Aqua.test_all(BnGsim)

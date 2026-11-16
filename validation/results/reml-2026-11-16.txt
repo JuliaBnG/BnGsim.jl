@@ -1,0 +1,16 @@
+# validation/reml.jl on amd (Ryzen 9 5950X), 2026-11-16, replicates 1-300 for both selections.
+# The last line of each block was printed by a version of the script whose label still said
+# "reduced by selection"; under random selection the reduction is drift only.
+# BnGsim 0.5.0, Julia 1.13.4, 16 threads, 300 replicates, selection truncation, 332.0 s
+σ²a  REML mean 0.9856 (s.e. 0.0068), true 1.0000, within 3 s.e.
+σ²e  REML mean 2.3211 (s.e. 0.0056), true 2.3333, within 3 s.e.
+h²   REML mean 0.2976 (s.e. 0.0017), true 0.3000, within 3 s.e.
+genetic variance within the last cohort 0.6553 (s.e. 0.0067): reduced by selection, not a REML target
+gate passed
+
+# BnGsim 0.5.0, Julia 1.13.4, 16 threads, 300 replicates, selection random, 165.0 s
+σ²a  REML mean 1.0089 (s.e. 0.0093), true 1.0000, within 3 s.e.
+σ²e  REML mean 2.3246 (s.e. 0.0074), true 2.3333, within 3 s.e.
+h²   REML mean 0.3019 (s.e. 0.0024), true 0.3000, within 3 s.e.
+genetic variance within the last cohort 0.9565 (s.e. 0.0087): reduced by selection, not a REML target
+gate passed
