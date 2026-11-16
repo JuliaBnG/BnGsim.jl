@@ -1,6 +1,6 @@
 # BnGsim.jl release notes
 
-## v0.4.0 (unreleased)
+## v0.4.0 (2026-11-16)
 
 The breeding loop (second part of M3): discrete generations of one
 additive trait, evaluated through Breeding.jl.
@@ -38,7 +38,7 @@ additive trait, evaluated through Breeding.jl.
   GBLUP on a stated scenario with Fisher–Wright founders, paired over
   replicates.
 
-## v0.3.0 (unreleased)
+## v0.3.0 (not registered; released as part of v0.4.0)
 
 First part of the breeding-loop work (M3): keyed random streams, a
 faster meiosis kernel, and a trait model that keeps effect distributions.

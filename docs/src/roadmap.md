@@ -60,7 +60,7 @@ a dependency, and BnGsim does not aim for API compatibility with them.
 Sequence-level forward simulation belongs in FisherWright (or SLiM), not
 here.
 
-## 2. Current status (v0.4.0, in progress)
+## 2. Current status (v0.4.0)
 
 | Area | State |
 | :--- | :--- |
