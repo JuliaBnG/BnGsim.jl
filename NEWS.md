@@ -1,6 +1,6 @@
 # BnGsim.jl release notes
 
-## v0.5.0 (unreleased)
+## v0.5.0 (2026-11-16)
 
 Third part of M3: overlapping generations, sex- and age-limited records,
 re-estimated variance components and checkpoints.
