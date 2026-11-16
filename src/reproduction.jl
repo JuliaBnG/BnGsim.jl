@@ -228,7 +228,9 @@ function gene_drop!(
     rng::AbstractRNG = Random.default_rng(),
 )
     check_coordinates(vm, sp)
-    return gene_drop!(og.gt, pg.gt, pm, sum_map(sp), vm.pos; rng = rng)
+    # the bit storage is padded to a multiple of 64 rows; pass the loci only
+    nlc = og.nlc
+    return gene_drop!(view(og.gt, 1:nlc, :), view(pg.gt, 1:nlc, :), pm, sum_map(sp), vm.pos; rng = rng)
 end
 
 """

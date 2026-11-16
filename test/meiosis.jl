@@ -67,6 +67,12 @@
             @test off3[l, g] == par[l, 2p-1+ph]
         end
     end
+    # v0.2 gene_drop! on Haplotypes whose loci are not a multiple of 64 (1200
+    # here) used to throw DimensionMismatch
+    og = Haplotype(nlc, 200)
+    gene_drop!(og, par, plan, sp, vm; rng = Xoshiro(3))
+    @test all((og[l, 1] == par[l, 2plan[1, 1]-1]) | (og[l, 1] == par[l, 2plan[1, 1]]) for l = 1:nlc)
+    @test !any(packed(og)[(nlc+1):end, :])                     # padding untouched
     @test_throws DimensionMismatch make_progeny!(Haplotype(nlc, 10), par, plan, mm, key)
     @test_throws ArgumentError make_progeny!(Haplotype(nlc, 200), par, plan .+ nid, mm, key)
     @test_throws DimensionMismatch make_progeny!(Haplotype(nlc, 200), par, plan[:, 1:1], mm, key)

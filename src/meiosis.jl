@@ -191,6 +191,6 @@ function make_progeny!(off::Haplotype, par::Haplotype, plan::AbstractMatrix{<:In
     record || return off
     ptr = cumsum([1; length.(recs)])
     rec = MeiosisRecord([Int(plan[(g+1)÷2, 2-g%2]) for g = 1:2n], BitMatrix(phase), ptr,
-        reduce(vcat, recs; init = UInt32[]))
+        isempty(recs) ? UInt32[] : reduce(vcat, recs))   # no `init`: it defeats the fast vcat
     return off, rec
 end
