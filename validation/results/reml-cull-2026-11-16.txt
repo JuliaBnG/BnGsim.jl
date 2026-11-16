@@ -1,0 +1,7 @@
+# validation/reml.jl 300 cull on amd (Ryzen 9 5950X), 2026-11-16
+# BnGsim 0.7.0, Julia 1.13.4, 16 threads, 300 replicates, selection cull, 209.0 s
+σ²a  REML mean 0.9826 (s.e. 0.0068), true 1.0000, within 3 s.e.
+σ²e  REML mean 2.3316 (s.e. 0.0066), true 2.3333, within 3 s.e.
+h²   REML mean 0.2962 (s.e. 0.0018), true 0.3000, within 3 s.e.
+genetic variance within the last cohort 0.6948 (s.e. 0.0082): not a REML target
+gate passed

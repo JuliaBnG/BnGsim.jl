@@ -14,10 +14,13 @@
 #   dams are chosen among the males and females of age at most
 #   `max_sire_age` and `max_dam_age` (age 0: born at t) and given numbers
 #   of offspring; matings pair the sire and dam slots at random;
-# - the offspring form cohort t + 1. Nothing is removed: an animal not
-#   selected at t can be selected at t + 1 while it is young enough.
+# - the offspring form cohort t + 1; between t and t + 1 animals survive
+#   with an age-specific probability and, optionally, unselected adults
+#   are culled. Nothing is removed from the population: dead or culled
+#   animals keep their records, pedigree and haplotypes, but are no longer
+#   candidates and make no later records.
 # Every random draw is keyed by a `SimKey` (domains MATING, PHENOTYPE,
-# SELECTION), so a run is a function of its key and inputs.
+# SELECTION, SURVIVAL), so a run is a function of its key and inputs.
 
 # Stage codes within domains; fixed values, never schedule positions.
 const _STAGE_SEX = 0x0001
@@ -35,7 +38,8 @@ Fields:
 
 - `sire`, `dam` (`0` = unknown), `male`, `generation` (the birth cohort,
   i.e. the time step of birth; founders are 0; with discrete generations
-  it is the generation number);
+  it is the generation number), `exit` (the first time step at which the
+  animal is dead or culled; `typemax(Int32)` while it lives);
 - `tbv`, `phenotype`, `ebv`: `n × k` matrices, one column per trait, of
   genetic values, phenotypes (`NaN` in the sex that does not express the
   trait) and the last evaluation;
@@ -55,6 +59,7 @@ mutable struct Population
     dam::Vector{Int32}
     male::BitVector
     generation::Vector{Int32}
+    exit::Vector{Int32}
     tbv::Matrix{Float64}
     phenotype::Matrix{Float64}
     ebv::Matrix{Float64}
@@ -135,7 +140,7 @@ function _founders(hap, qs, traits, key, Re)
     Lr = Diagonal(σe) * Matrix(cholesky(Symmetric(Re)).L)
     G0 = σa .* C .* σa'
     R0 = σe .* Re .* σe'
-    pop = Population(zeros(Int32, n), zeros(Int32, n), falses(n), zeros(Int32, n), G,
+    pop = Population(zeros(Int32, n), zeros(Int32, n), falses(n), zeros(Int32, n), fill(typemax(Int32), n), G,
         fill(NaN, size(G)), fill(NaN, size(G)), [hap], [1], qs, traits, Lr, key, G0, R0)
     _sexes!(pop, 1:n, 0)
     _phenotypes!(pop, 1:n, 0)
@@ -146,6 +151,15 @@ _has_dominance(q::TraitQTL) = any(!iszero, q.dominance)
 
 # the current time step: the cohort of the youngest animals
 current_step(pop::Population) = ngenerations(pop) - 1
+
+"""
+    alive(pop::Population, t = current_step(pop)) -> Vector{Int}
+
+Ids of the animals born at or before time step `t` that are neither dead
+nor culled at `t`.
+"""
+alive(pop::Population, t::Integer = current_step(pop)) =
+    filter(i -> pop.generation[i] <= t < pop.exit[i], 1:length(pop))
 
 _expresses(t::Trait, male::Bool) = t.sex == 2 || (t.sex == 1) == male
 
@@ -164,12 +178,15 @@ recorded(pop::Population, t::Integer = current_step(pop); trait::Integer = 1) =
 
 The `n × k` pattern of the records available to an evaluation at time
 step `t`: entry `(i, j)` is `true` if animal `i` expresses trait `j` (by
-sex) and is at least the trait's `age` old.
+sex), is at least the trait's `age` old, and was alive at that age (an
+animal that died or was culled earlier has no record).
 """
 function observed(pop::Population, t::Integer = current_step(pop))
     obs = falses(length(pop), ntraits(pop))
     for j = 1:ntraits(pop), i = 1:length(pop)
-        obs[i, j] = !isnan(pop.phenotype[i, j]) && t - pop.generation[i] >= Int(pop.traits[j].age)
+        a = Int(pop.traits[j].age)
+        obs[i, j] = !isnan(pop.phenotype[i, j]) && t - pop.generation[i] >= a &&
+                    pop.generation[i] + a < pop.exit[i]
     end
     return obs
 end
@@ -208,7 +225,8 @@ end
 """
     Scheme(; noff, nsire, ndam, evaluation = :pblup, selection = :truncation,
            K = NaN, λ = 0.0, κ = 0.0, ub = 1.0, chip = Int32[], blend = 0.05,
-           max_sire_age = 0, max_dam_age = 0, reml = false, weights = Float64[])
+           max_sire_age = 0, max_dam_age = 0, reml = false, weights = Float64[],
+           survival = Float64[], cull_unselected = false, genotyped_cohorts = 0)
 
 A selection and mating scheme, applied every time step:
 
@@ -219,8 +237,13 @@ A selection and mating scheme, applied every time step:
   records), `:pblup` (animal model with the pedigree relationship matrix),
   `:gblup` (animal model with ``G^* = (1-w)G + wA``, `w = blend`, `G`
   VanRaden at the loci `chip` with base allele frequencies from the
-  founders). With several traits the animal model is multi-trait, with
-  an intercept per trait and residuals correlated within animals;
+  founders), `:ssgblup` (single-step, ``H^{-1}`` of Legarra et al. 2009
+  and Christensen & Lund 2010 from `RelationshipMatrices.hinv`, with the
+  animals of the last `genotyped_cohorts` cohorts genotyped at the loci
+  `chip` (`0`: all animals), ``G`` as for `:gblup` and blended with
+  ``A_{22}`` by `blend`; with every animal genotyped it equals `:gblup`).
+  With several traits the animal model is multi-trait, with an intercept
+  per trait and residuals correlated within animals;
 - `weights`: the index weights ``w`` (one per trait; empty: all `1`).
   Candidates are ranked on ``I = w'\\hat a``, which with economic values
   as weights and multi-trait BLUP EBVs is the optimal index for the
@@ -254,7 +277,20 @@ A selection and mating scheme, applied every time step:
   estimated with AI steps on the Cholesky factors (`param = :cholesky` of
   `Breeding.reml`), which keeps the estimates positive definite; early
   estimates may lie on the boundary (e.g. a genetic correlation near ±1
-  after one cohort).
+  after one cohort);
+- `survival`: `survival[a + 1]` is the probability that an animal alive
+  at age `a` survives to age `a + 1` (the last entry for all older ages;
+  empty: no deaths). Deaths are drawn between steps (`Domain.SURVIVAL`),
+  independently of genotype and records (missing at random), so they
+  bias neither BLUP nor REML;
+- `cull_unselected`: if `true`, eligible animals of age 1 or more that
+  are not selected as parents at a step are culled. Young candidates
+  (age 0) are kept for the next step. Culling depends on the EBV, so the
+  animals left are a selected sample; BLUP and REML with all records and
+  the pedigree account for that.
+
+Dead and culled animals are not candidates, and a record taken at an age
+the animal did not reach is missing.
 """
 Base.@kwdef struct Scheme
     noff::Int
@@ -272,24 +308,31 @@ Base.@kwdef struct Scheme
     max_dam_age::Int = 0
     reml::Bool = false
     weights::Vector{Float64} = Float64[]
+    survival::Vector{Float64} = Float64[]
+    cull_unselected::Bool = false
+    genotyped_cohorts::Int = 0
     function Scheme(noff, nsire, ndam, evaluation, selection, K, λ, κ, ub, chip, blend,
-        max_sire_age, max_dam_age, reml, weights)
+        max_sire_age, max_dam_age, reml, weights, survival, cull_unselected, genotyped_cohorts)
         noff > 1 && nsire > 0 && ndam > 0 || throw(ArgumentError("noff > 1, nsire > 0 and ndam > 0 are required"))
         max_sire_age >= 0 && max_dam_age >= 0 || throw(ArgumentError("maximum ages must be non-negative"))
-        reml && !(evaluation in (:pblup, :gblup)) &&
-            throw(ArgumentError("reml = true needs evaluation :pblup or :gblup"))
-        evaluation in (:tbv, :phenotype, :pblup, :gblup) ||
-            throw(ArgumentError("evaluation must be :tbv, :phenotype, :pblup or :gblup"))
+        reml && !(evaluation in (:pblup, :gblup, :ssgblup)) &&
+            throw(ArgumentError("reml = true needs evaluation :pblup, :gblup or :ssgblup"))
+        evaluation in (:tbv, :phenotype, :pblup, :gblup, :ssgblup) ||
+            throw(ArgumentError("evaluation must be :tbv, :phenotype, :pblup, :gblup or :ssgblup"))
+        all(p -> 0 <= p <= 1, survival) || throw(ArgumentError("survival probabilities must lie in [0, 1]"))
+        genotyped_cohorts >= 0 || throw(ArgumentError("genotyped_cohorts must be non-negative"))
         selection in (:truncation, :ocs, :rocs, :random) ||
             throw(ArgumentError("selection must be :truncation, :ocs, :rocs or :random"))
         selection == :ocs && !(K > 0) && throw(ArgumentError(":ocs needs a constraint K > 0"))
-        evaluation == :gblup && isempty(chip) && throw(ArgumentError(":gblup needs chip loci"))
+        evaluation in (:gblup, :ssgblup) && isempty(chip) &&
+            throw(ArgumentError(":$evaluation needs chip loci"))
         0 <= blend < 1 || throw(ArgumentError("blend must lie in [0, 1)"))
         0 < ub <= 1 || throw(ArgumentError("ub must lie in (0, 1]"))
         all(isfinite, weights) && (isempty(weights) || any(!iszero, weights)) ||
             throw(ArgumentError("weights must be finite and not all zero"))
         new(noff, nsire, ndam, evaluation, selection, K, λ, κ, ub, Int32.(chip), blend,
-            max_sire_age, max_dam_age, reml, Float64.(weights))
+            max_sire_age, max_dam_age, reml, Float64.(weights), Float64.(survival), cull_unselected,
+            genotyped_cohorts)
     end
 end
 
@@ -322,14 +365,27 @@ function _haplotypes(pop::Population, ids)
     return out
 end
 
+"""
+    genotyped(pop::Population, scheme::Scheme, t = current_step(pop)) -> Vector{Int}
+
+The animals genotyped for `:gblup` (all) and `:ssgblup` (those born in
+the last `scheme.genotyped_cohorts` cohorts at step `t`, or all when it
+is `0`).
+"""
+function genotyped(pop::Population, sc::Scheme, t::Integer = current_step(pop))
+    (sc.evaluation == :gblup || sc.genotyped_cohorts == 0) && return collect(1:length(pop))
+    filter(i -> t - pop.generation[i] < sc.genotyped_cohorts, 1:length(pop))
+end
+
 function _kinv(pop::Population, sc::Scheme)
     sc.evaluation == :pblup && return ainv(pop.sire, pop.dam)
-    n = length(pop)
-    H = _haplotypes(pop, 1:n)
+    ids = genotyped(pop, sc)
+    H = _haplotypes(pop, ids)
     base = pop.blocks[1]                                  # the founders
     p = zeros(base.nlc)                                   # grm wants one per locus
     p[sc.chip] = vec(sum(dosage(base, sc.chip); dims = 2)) ./ base.nhp
     G = grm(H; p = p, loci = sc.chip)
+    sc.evaluation == :ssgblup && return hinv(pop.sire, pop.dam, G, ids; delta = sc.blend)
     sc.blend > 0 && (G = (1 - sc.blend) .* G .+ sc.blend .* nrm(pop.sire, pop.dam))
     inv(cholesky(Symmetric(G)))
 end
@@ -338,7 +394,7 @@ end
     evaluate!(pop::Population, scheme::Scheme) -> Union{Nothing, MME}
 
 Fill `pop.ebv` for every animal and trait by the scheme's evaluation at
-the current time step. For `:pblup` and `:gblup` the mixed-model
+the current time step. For `:pblup`, `:gblup` and `:ssgblup` the mixed-model
 equations over the records available (see [`observed`](@ref)) are built
 with Breeding.jl and solved directly: ``y = 1\\mu + Za + e`` with
 ``\\sigma^2_e`` scaling for one trait; for several traits, records stacked
@@ -464,13 +520,22 @@ function _pev_index(m::MME, cand, w, n)
     return (Ω .+ Ω') ./ 2
 end
 
+# living males and females young enough to be parents at step g
+function _eligible(pop::Population, sc::Scheme, g)
+    young(a) = pop.first[max(0, g - a)+1]:length(pop)
+    males = filter(i -> pop.male[i] && pop.exit[i] > g, young(sc.max_sire_age))
+    females = filter(i -> !pop.male[i] && pop.exit[i] > g, young(sc.max_dam_age))
+    return males, females
+end
+
 """
     select_parents(pop::Population, scheme::Scheme, m) -> (sires, nsire_off, dams, ndam_off)
 
 Parents and their numbers of offspring (each list summing to
-`scheme.noff`), among the males of age at most `scheme.max_sire_age` and
-the females of age at most `scheme.max_dam_age` at the current time step
-(the youngest cohort only, with the default ages 0), ranked on the index
+`scheme.noff`), among the living males of age at most
+`scheme.max_sire_age` and females of age at most `scheme.max_dam_age` at
+the current time step (the youngest cohort only, with the default ages
+0), ranked on the index
 ``w'\\hat a`` (see [`Scheme`](@ref)). `m` is the `MME` returned by
 [`evaluate!`](@ref) (`nothing` for `:tbv` and `:phenotype`); `:rocs` takes
 the prediction error covariance of the candidates' index from it. Every
@@ -480,9 +545,10 @@ function select_parents(pop::Population, sc::Scheme, m)
     g = current_step(pop)
     w = index_weights(pop, sc)
     index = pop.ebv * w
-    eligible(a) = pop.first[max(0, g - a)+1]:length(pop)
-    males = filter(i -> pop.male[i], eligible(sc.max_sire_age))
-    females = filter(i -> !pop.male[i], eligible(sc.max_dam_age))
+    males, females = _eligible(pop, sc, g)
+    (isempty(males) || isempty(females)) && throw(ArgumentError(
+        "no living $(isempty(males) ? "males" : "females") are eligible at step $g; " *
+        "raise the maximum ages or the survival"))
     cand = sort!([males; females])
     if sc.selection in (:truncation, :random)
         crit = sc.selection == :truncation ? index :
@@ -549,6 +615,7 @@ function step!(pop::Population, sc::Scheme, mm::MeiosisMap)
     s, ns, d, nd = select_parents(pop, sc, m)
     plan = mating_plan(pop, s, ns, d, nd)
     L = mean(g + 1 .- pop.generation[plan])
+    _cull_and_survive!(pop, sc, g, [s; d])
     # the parents' haplotypes, gathered from their cohorts; offspring
     # depend on the parents' alleles and the keys only, not on this order
     ups = sort!(unique(plan))
@@ -566,12 +633,33 @@ function step!(pop::Population, sc::Scheme, mm::MeiosisMap)
     pop.tbv = vcat(pop.tbv, reduce(hcat, [tbv(off, q) for q in pop.qtl]))
     pop.phenotype = vcat(pop.phenotype, fill(NaN, sc.noff, k))
     pop.ebv = vcat(pop.ebv, fill(NaN, sc.noff, k))
+    append!(pop.exit, fill(typemax(Int32), sc.noff))
     push!(pop.blocks, off)
     push!(pop.first, n0 + 1)
     _sexes!(pop, ids, g + 1)
     _phenotypes!(pop, ids, g + 1)
     return merge(generation_summary(pop, g; weights = w), acc,
         (nsire = length(s), ndam = length(d), L = L), _vc(pop))
+end
+
+# Between steps g and g + 1: culling of unselected adults, then deaths.
+# An animal alive at g of age a survives to g + 1 with probability
+# survival[min(a + 1, end)], a keyed draw per animal and step.
+function _cull_and_survive!(pop::Population, sc::Scheme, g, parents)
+    if sc.cull_unselected
+        males, females = _eligible(pop, sc, g)
+        sel = Set(parents)
+        for i in Iterators.flatten((males, females))
+            g - pop.generation[i] >= 1 && !(i in sel) && (pop.exit[i] = g + 1)
+        end
+    end
+    isempty(sc.survival) && return
+    for i in alive(pop, g)
+        a = g - pop.generation[i]
+        q = sc.survival[min(a + 1, end)]
+        u = rand(keyed_rng(SimKey(pop.key; generation = g + 1, domain = Domain.SURVIVAL, entity = i)))
+        u < q || (pop.exit[i] = g + 1)
+    end
 end
 
 function _accuracies(pop::Population, ids, w)
@@ -616,7 +704,8 @@ traits, then also `mean_<name>`, `var_<name>` per trait and the genetic
 correlation `rg_<a>_<b>` of each pair within the cohort); mean pedigree
 inbreeding `F` and mean pedigree `coancestry` ``\\bar\\theta_g`` over all
 pairs of the cohort, self-coancestry ``(1 + F_i)/2`` included (founders
-unrelated and non-inbred); and the loss of heterozygosity `Fhet`.
+unrelated and non-inbred); the loss of heterozygosity `Fhet`; and the
+number of animals `alive` at step `g` (all cohorts).
 
 `Fhet` is ``1 - (1 - \\bar\\theta_0)\\,\\bar H_g/\\bar H_0`` over all loci, with
 ``\\bar H`` the mean of ``2p(1-p)`` from the cohort's own allele
@@ -649,7 +738,8 @@ function generation_summary(pop::Population, g::Integer; weights = ones(ntraits(
             Tuple(C[j, l] for (j, l) in pairs))
         out = merge(out, per, rg)
     end
-    merge(out, (F = mean(F), coancestry = θ, Fhet = 1 - (1 - θ0(pop)) * H(hap) / H(pop.blocks[1])))
+    merge(out, (F = mean(F), coancestry = θ, Fhet = 1 - (1 - θ0(pop)) * H(hap) / H(pop.blocks[1]),
+        alive = count(i -> pop.generation[i] <= g < pop.exit[i], 1:length(pop))))
 end
 
 """

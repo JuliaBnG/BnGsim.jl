@@ -1,0 +1,10 @@
+# BnGsim 0.7.0, Julia 1.13.4, 16 threads, 30 replicates, 47.0 s
+phenotype  mean accuracy 0.4539  (s.e. 0.0052)
+pblup      mean accuracy 0.5368  (s.e. 0.0068)
+gblup      mean accuracy 0.7304  (s.e. 0.0058)
+ssgblup    mean accuracy 0.7026  (s.e. 0.0058)
+pblup      − phenotype  0.0829  (s.e. 0.0068, margin > 2 s.e.)
+gblup      − pblup      0.1936  (s.e. 0.0088, margin > 2 s.e.)
+ssgblup    − pblup      0.1658  (s.e. 0.0087, margin > 2 s.e.)
+gblup      − ssgblup    0.0278  (s.e. 0.0039, reported, not gated)
+gate passed

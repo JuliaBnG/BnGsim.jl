@@ -1,6 +1,6 @@
 # Gate for re-estimated variance components: REML under selection.
 #
-#   julia -t 16 --project=<env with BnGsim, BnGStructs> validation/reml.jl [replicates] [truncation|random]
+#   julia -t 16 --project=<env with BnGsim, BnGStructs> validation/reml.jl [replicates] [truncation|random|cull]
 #
 # Claim tested: with all records and the full pedigree back to the
 # founders, REML estimates of σ²a and σ²e are unbiased for the founder
@@ -18,7 +18,14 @@
 #   that σ²a = 1 exactly in the founders, h² = 0.3, so σ²e = 7/3;
 # - scheme: 400 offspring per step, 20 sires and 80 dams by truncation on
 #   PBLUP EBV (or, as the control, at random), discrete generations,
-#   5 steps; REML (AI) re-estimates the
+#   5 steps;
+# - `cull`: the same trait recorded at age 1 (so an animal that dies or is
+#   culled before then has no record), parents up to age 2, survival 0.9
+#   per step, unselected adults culled; selection and culling on EBV make
+#   records missing depending on earlier records, which REML with all
+#   data and the pedigree ignores correctly (missing at random given the
+#   data; Im, Fernando & Gianola 1989); step 0 is random mating, as there
+#   are no records yet, then 5 evaluated steps; REML (AI) re-estimates the
 #   components before every evaluation from step 1 on (at step 0 only the
 #   unrelated founders are recorded and the components are not separable);
 # - estimate: the components used at the last step (2000 records:
@@ -36,10 +43,16 @@ for r = 1:nrep
     vm = VariantMap(sort(unique(rand(rng, 1:150_000_000, 3000))), sp)
     hap = Haplotype(BitMatrix(rand(rng, Bool, length(vm), 800)))
     mm = MeiosisMap(sp, vm)
-    t = Trait("y"; h² = 0.3, σₐ = 1.0)
+    t = Trait("y"; h² = 0.3, σₐ = 1.0, age = sel == :cull ? 1 : 0)
     qtl = eqtl(hap, sort(randperm(rng, length(vm))[1:300]), t; rng = rng)
     pop = founder_population(hap, qtl, t, SimKey(2026; replicate = r))
-    sc = Scheme(; noff = 400, nsire = 20, ndam = 80, evaluation = :pblup, selection = sel, reml = true)
+    sc = sel == :cull ?
+         Scheme(; noff = 400, nsire = 20, ndam = 80, evaluation = :pblup, reml = true, max_sire_age = 2,
+             max_dam_age = 2, survival = [0.9], cull_unselected = true) :
+         Scheme(; noff = 400, nsire = 20, ndam = 80, evaluation = :pblup, selection = sel, reml = true)
+    # records at age 1: none at step 0, so the founders are mated at random
+    sel == :cull && step!(pop, Scheme(; noff = 400, nsire = 20, ndam = 80, evaluation = :tbv,
+        selection = :random, max_sire_age = 2, max_dam_age = 2, survival = [0.9]), mm)
     df = simulate!(pop, sc, mm, 5)
     va[r], ve[r] = df.va[5], df.ve[5]
     h2[r] = va[r] / (va[r] + ve[r])

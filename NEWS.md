@@ -1,5 +1,56 @@
 # BnGsim.jl release notes
 
+## v0.7.0 (unreleased)
+
+Fifth part of M3: survival, culling and single-step GBLUP.
+
+### Breaking
+
+- `Population` has a new field `exit` (the first step at which an animal
+  is dead or culled); the summaries have a new column `alive`.
+- A record taken at an age the animal did not reach is missing (only
+  relevant with `survival` or `cull_unselected`).
+
+### New
+
+- `Scheme(; survival)`: per-age probabilities of surviving to the next
+  step, keyed draws (`Domain.SURVIVAL`), independent of genotype and
+  records. Dead animals are not candidates and make no later records.
+- `Scheme(; cull_unselected)`: eligible animals of age 1 or more that
+  are not selected are culled; young candidates are kept for the next
+  step.
+- `evaluation = :ssgblup` with `Scheme(; genotyped_cohorts)`: single-step
+  GBLUP (`RelationshipMatrices.hinv`) with the last cohorts genotyped,
+  for one or several traits and with REML; with every animal genotyped
+  it equals `:gblup`.
+- `alive(pop, t)`, `genotyped(pop, scheme, t)`.
+
+### Validation
+
+- Tests: survival frequencies by age class against the probabilities
+  (4 s.e.); dead and culled animals never parents; records missing for
+  animals that did not reach the recording age; culling keeps exactly the
+  selected adults; checkpoint–resume repeats the deaths; `:ssgblup` with
+  everyone genotyped equal to `:gblup`; single-step with genotyped young
+  animals, REML and two traits.
+- `validation/accuracy.jl` (30 replicates, Fisher–Wright founders) now
+  includes `:ssgblup` with the last 2 cohorts genotyped: accuracy 0.703
+  (s.e. 0.006), above PBLUP by 0.166 (s.e. 0.009) and below GBLUP with
+  every animal genotyped by 0.028 (s.e. 0.004). The other three methods
+  repeat the v0.4.0 values exactly (`accuracy-2026-11-16-ssgblup.txt`).
+- `validation/reml.jl ... cull` (300 replicates): records at age 1,
+  parents up to age 2, survival 0.9, unselected adults culled; σ̂²a =
+  0.983 (s.e. 0.007), σ̂²e = 2.332 (0.007), both within 3 s.e. of 1 and
+  2.333 (`reml-cull-2026-11-16.txt`).
+- `validation/reml-overlap.jl`, a diagnostic: 2–4 replicates of the
+  culling scenario had suggested σ̂²a ≈ 0.75–0.85. Over 50 replicates for
+  each of five configurations (selection rule, record age, parental ages,
+  300 or 2900 QTL), no estimate is off by more than about 2 s.e. (largest
+  deficit: records at birth, parents up to age 2, 0.966, s.e. 0.016).
+  With records at age 1 and parents up to age 2, σ̂²a is 0.980 (0.019)
+  with 300 QTL and 1.003 (0.017) with 2900, consistent with a small
+  finite-locus effect (`reml-overlap-2026-11-16.txt`).
+
 ## v0.6.0 (2026-11-16)
 
 Fourth part of M3: several traits, selection on an index.

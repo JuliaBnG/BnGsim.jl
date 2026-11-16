@@ -3,7 +3,8 @@
 #   julia -t 16 --project=<env with BnGsim, BnGStructs> validation/accuracy.jl [replicates]
 #
 # Expected ordering on this scenario: ρ(phenotype) < ρ(PBLUP) < ρ(GBLUP),
-# with each margin larger than its Monte-Carlo standard error.
+# and ρ(PBLUP) < ρ(ssGBLUP), each margin larger than 2 Monte-Carlo
+# standard errors.
 #
 # Scenario (stated in full, as the reference for the gate):
 # - genome: 3 chromosomes of 50 Mb, 1 M each (1 cM/Mb);
@@ -13,6 +14,8 @@
 # - trait: additive, 200 QTL drawn from the loci, normal effects,
 #   h² = 0.25, σₐ = 1 in the founders;
 # - chip: all non-QTL loci (dense panel); GBLUP blends G with 5 % of A;
+#   single-step GBLUP genotypes the last 2 cohorts only (H⁻¹, G blended
+#   with 5 % of A22);
 # - scheme: 300 offspring per generation, 15 sires and 60 dams selected by
 #   truncation on the method's EBV, 5 generations;
 # - accuracy: cor(EBV, TBV) among the candidates of generations 1 to 4,
@@ -24,7 +27,7 @@ using BnGsim, BnGStructs, FisherWright, Random, Statistics, Printf
 
 nrep = parse(Int, get(ARGS, 1, "20"))
 sp = GenericSpecies("val", [50_000_000, 50_000_000, 50_000_000])
-methods = (:phenotype, :pblup, :gblup)
+methods = (:phenotype, :pblup, :gblup, :ssgblup)
 acc = zeros(nrep, length(methods))
 t0 = time()
 for r = 1:nrep
@@ -42,7 +45,7 @@ for r = 1:nrep
     qtl = eqtl(hap, qloci, t; rng = rng)
     for (k, ev) in enumerate(methods)
         pop = founder_population(hap, qtl, t, SimKey(2026; replicate = r))
-        sc = Scheme(; noff = 300, nsire = 15, ndam = 60, evaluation = ev, chip = chip)
+        sc = Scheme(; noff = 300, nsire = 15, ndam = 60, evaluation = ev, chip = chip, genotyped_cohorts = 2)
         df = simulate!(pop, sc, mm, 5)
         acc[r, k] = mean(df.accuracy[2:5])
     end
@@ -55,7 +58,7 @@ for (k, ev) in enumerate(methods)
     @printf("%-10s mean accuracy %.4f  (s.e. %.4f)\n", ev, mean(acc[:, k]), std(acc[:, k]) / sqrt(nrep))
 end
 ok = true
-for (a, b) in ((1, 2), (2, 3))
+for (a, b) in ((1, 2), (2, 3), (2, 4))
     d = acc[:, b] .- acc[:, a]
     se = std(d) / sqrt(nrep)
     pass = mean(d) > 2se
@@ -63,4 +66,6 @@ for (a, b) in ((1, 2), (2, 3))
     @printf("%-10s − %-10s %.4f  (s.e. %.4f, %s)\n", methods[b], methods[a], mean(d), se,
         pass ? "margin > 2 s.e." : "NOT SHOWN")
 end
+d = acc[:, 3] .- acc[:, 4]
+@printf("%-10s − %-10s %.4f  (s.e. %.4f, reported, not gated)\n", methods[3], methods[4], mean(d), std(d) / sqrt(nrep))
 println(ok ? "gate passed" : "gate NOT passed")
