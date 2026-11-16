@@ -1,6 +1,6 @@
 # BnGsim.jl release notes
 
-## v0.9.0 (unreleased)
+## v0.9.0 (2026-11-16)
 
 Realized IBD (M5, BnGsim side): founder segments from the loop's
 crossover records.
