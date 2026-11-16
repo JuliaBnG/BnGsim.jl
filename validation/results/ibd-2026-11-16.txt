@@ -1,4 +1,4 @@
-# validation/ibd.jl 400 on the local PC (Ryzen 9 3900X), 2026-11-17, 4 threads; RelationshipMatrices 0.7.1 (branch m5-segments)
+# validation/ibd.jl 400 on the local PC (Ryzen 9 3900X), 2026-11-16, 4 threads; RelationshipMatrices 0.7.1 (branch m5-segments)
 # BnGsim 0.9.0, Julia 1.13.4, 400 replicates, 30.0 s
 genome: B = [50000000, 100000000, 150000000] bases, L = [0.5, 1.5, 1.0] M; Var(p_G) = 0.035243
 half  n = 32734  mean 0.24947 (theory 0.25000, s.e. 0.00052) ok   variance 0.008812 (theory 0.008811, s.e. 0.000059) ok

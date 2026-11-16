@@ -33,12 +33,12 @@ crossover records.
   full sibs from BnGsim's meiosis against their exact mean and variance
   under Haldane's map, on a genome with unequal cM/Mb (50/100/150 Mb at
   0.5/1.5/1.0 M), 400 replicates
-  (`validation/results/ibd-2026-11-17.txt`): half sibs (n = 32 734) mean
+  (`validation/results/ibd-2026-11-16.txt`): half sibs (n = 32 734) mean
   0.2495 (theory 0.25, s.e. 0.0005), variance 0.008812 (theory 0.008811,
   s.e. 0.000059); full sibs (n = 7248) mean 0.4989 (0.5, 0.0016), variance
   0.01740 (0.01762, 0.00027).
 
-## v0.8.0 (2026-11-17)
+## v0.8.0 (2026-11-16)
 
 Sixth part of M3: optimum contribution selection with a target rate of
 inbreeding, for overlapping generations, and a comparison of three
