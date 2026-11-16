@@ -139,3 +139,47 @@ function keyed_rng(k::SimKey)
     (s0 | s1 | s2 | s3) == 0 && (s0 = 0x0000000000000001)
     return Xoshiro(s0, s1, s2, s3)
 end
+
+# ---- version-independent integer sampling ----------------------------------
+# `rand(rng, a:b)` and `shuffle!` use algorithms that Julia may change
+# between versions (`shuffle!` did between 1.10 and 1.11). Keyed results
+# must not depend on them, so integers are drawn here from raw `UInt64`
+# outputs of the stream, whose algorithm (Xoshiro256++) is fixed.
+
+# Uniform integer in 0:(n-1), n ≥ 1, by Lemire's multiply-and-reject
+# method (exact, unbiased).
+@inline function _uniform_below(rng::AbstractRNG, n::UInt64)
+    m = UInt128(rand(rng, UInt64)) * n
+    lo = m % UInt64
+    if lo < n
+        t = (-n) % n                       # 2^64 mod n
+        while lo < t
+            m = UInt128(rand(rng, UInt64)) * n
+            lo = m % UInt64
+        end
+    end
+    return (m >> 64) % UInt64
+end
+
+"""
+    keyed_int(rng, a, b)
+
+A uniform integer in `a:b` drawn from raw 64-bit outputs of `rng`, by an
+algorithm that does not change with the Julia version.
+"""
+@inline keyed_int(rng::AbstractRNG, a::T, b::T) where {T<:Integer} =
+    a + T(_uniform_below(rng, UInt64(b - a) + one(UInt64)))
+
+"""
+    keyed_shuffle!(rng, v)
+
+Fisher–Yates shuffle of `v` with [`keyed_int`](@ref); the same `rng` state
+gives the same order on every Julia version.
+"""
+function keyed_shuffle!(rng::AbstractRNG, v::AbstractVector)
+    for i = length(v):-1:2
+        j = keyed_int(rng, 1, i)
+        v[i], v[j] = v[j], v[i]
+    end
+    return v
+end

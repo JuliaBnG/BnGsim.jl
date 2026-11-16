@@ -1,6 +1,6 @@
 name = "BnGsim"
 uuid = "fa058a0c-7e86-4bcb-95e5-acc93d12197f"
-version = "0.3.0"
+version = "0.4.0"
 authors = ["Xijiang Yu <xijiang@users.noreply.github.com>"]
 license = "MIT"
 docs = "https://juliabng.github.io/BnGsim/"
@@ -9,6 +9,7 @@ repository = "https://github.com/JuliaBnG/BnGsim.jl"
 
 [deps]
 BnGStructs = "764f5799-4fa8-443f-b488-b719b6ff37e3"
+Breeding = "cb565f4f-111b-40c2-8768-3bafadb18772"
 DataFrames = "a93c6f00-e57d-5684-b7b6-d8193f3e46c0"
 Dates = "ade2ca70-3891-5945-98fb-dc099432e06a"
 Distributions = "31c24e10-a181-5473-b8eb-7969acd0382f"
@@ -25,6 +26,7 @@ StatsBase = "2913bbd2-ae8a-5f71-8c99-4fb6c76f3a91"
 Random123 = "1.7"
 Aqua = "0.8"
 BnGStructs = "0.3"
+Breeding = "0.3"
 DataFrames = "1"
 Dates = "1"
 Distributions = "0.25"

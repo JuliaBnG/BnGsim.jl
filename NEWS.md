@@ -1,6 +1,44 @@
 # BnGsim.jl release notes
 
-## v0.3.0 (unreleased)
+## v0.4.0 (2026-11-16)
+
+The breeding loop (second part of M3): discrete generations of one
+additive trait, evaluated through Breeding.jl.
+
+### New
+
+- `Population` and `founder_population`: animals in birth order with
+  pedigree, sex, genetic value, phenotype and EBV, and one haplotype block
+  per generation; founder sexes and phenotypes are keyed.
+- `Scheme`: evaluation by true values (`:tbv`), own phenotype,
+  `:pblup` or `:gblup` (mixed-model equations of Breeding.jl with the true
+  variance components; `G` at chip loci with founder allele frequencies,
+  blended with `A`); selection by truncation, `TM1997` (`:ocs`), `rocs`
+  (`:rocs`, with the candidates' prediction error covariance) or at random.
+- `step!`, `simulate!`, `evaluate!`, `select_parents`, `mating_plan`,
+  `generation_summary`: one generation is evaluate → select → pair (keyed
+  shuffle) → keyed meiosis → genetic values, sexes and phenotypes. Every
+  ranking breaks ties by ascending id. Per-generation summaries: mean,
+  variance and genic variance of genetic values, pedigree F, the loss of
+  heterozygosity, accuracy, parents used.
+- `keyed_int`, `keyed_shuffle!`: integer draws from raw 64-bit outputs.
+  Julia's `shuffle!` changed between 1.10 and 1.11, which made seeded runs
+  differ across Julia versions; with these, the golden runs are identical
+  on 1.10 and 1.13 and at 1 and 4 threads.
+- Breeding.jl 0.3 is a dependency.
+
+### Validation
+
+- Tests: PBLUP against a dense solve of the mixed-model equations;
+  truncation ranking and tie-breaking; the OCS coancestry constraint;
+  `rocs` with λ = κ = 0 equal to truncation; offspring genetic means equal
+  to parental means up to Mendelian sampling (4 s.e.); drift under random
+  selection; golden checksums.
+- `validation/accuracy.jl`: the accuracy ordering phenotype < PBLUP <
+  GBLUP on a stated scenario with Fisher–Wright founders, paired over
+  replicates.
+
+## v0.3.0 (not registered; released as part of v0.4.0)
 
 First part of the breeding-loop work (M3): keyed random streams, a
 faster meiosis kernel, and a trait model that keeps effect distributions.

@@ -1,0 +1,9 @@
+# validation/accuracy.jl 30 on amd (Ryzen 9 5950X), 2026-11-16, branch m3-loop at 3a94d83
+# BnGsim 0.4.0, Julia 1.13.4, 16 threads, 30 replicates, 34.0 s
+phenotype  mean accuracy 0.4539  (s.e. 0.0052)
+pblup      mean accuracy 0.5368  (s.e. 0.0068)
+gblup      mean accuracy 0.7304  (s.e. 0.0058)
+pblup      − phenotype  0.0829  (s.e. 0.0068, margin > 2 s.e.)
+gblup      − pblup      0.1936  (s.e. 0.0088, margin > 2 s.e.)
+gate passed
+wall 35.45 s, peak RSS 1376516 kB

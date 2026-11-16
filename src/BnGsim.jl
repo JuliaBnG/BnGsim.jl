@@ -7,6 +7,7 @@ using Mmap
 using Serialization
 using FisherWright
 using RelationshipMatrices
+using Breeding: Breeding, MME, mme, RandomEffect, solve_mme, incidence, TM1997, rocs, pev_candidates
 using DataFrames
 using Distributions
 using Random
@@ -16,6 +17,7 @@ using StatsBase: sample
 include("keys.jl")
 include("reproduction.jl")
 include("meiosis.jl")
+include("loop.jl")
 include("traits.jl")
 include("base-populations.jl")
 include("provenance.jl")
@@ -27,8 +29,10 @@ export random_mate, rnd_ped, expand, sample_id, sampleID, sample_loci, sampleLoc
 export norm_mv!, eqtl, trait_summary, tbv!, phenotype!, dummy_traits
 export FounderPopulation, sample_founder_population
 export provenance
-export SimKey, Domain, keyed_rng, philox4x64
+export SimKey, Domain, keyed_rng, philox4x64, keyed_int, keyed_shuffle!
 export MeiosisMap, MeiosisRecord, make_progeny!, ncrossovers
+export Population, founder_population, Scheme, evaluate!, select_parents, mating_plan, step!, simulate!
+export generation_summary, ngenerations, generation_ids
 export HistoricalSpec, historical_population, continue_population, founder_haplotypes
 export read_packed_haplotypes, write_xy
 export ld_decay, vanraden_g, founder_summary

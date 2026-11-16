@@ -7,12 +7,20 @@ using DataFrames
 using Random
 using Statistics
 using StatsBase: sample
+using LinearAlgebra
+using RelationshipMatrices: nrm
 
+# First draws of the version-independent integer sampler (test/keys.jl)
+const GOLDEN_INT = 0x3fcf3198
+const GOLDEN_SHUFFLE = [3, 7, 8, 11, 9, 1, 10, 6, 2, 4, 12, 5]
 # Checksum of the offspring in the golden meiosis test (test/meiosis.jl)
 const GOLDEN_MEIOSIS = 0xf111822b4a8deb93
+# Checksum of the pedigree and genetic values of the golden loop run (test/loop.jl)
+const GOLDEN_LOOP = 0x78a0a38d4a0288cb
 
 include("keys.jl")
 include("meiosis.jl")
+include("loop.jl")
 
 @testset "Aqua" begin
     Aqua.test_all(BnGsim)

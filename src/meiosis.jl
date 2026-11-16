@@ -94,7 +94,7 @@ function _gamete!(dst::BitMatrix, dcol::Int, src::BitMatrix, p::Int, nr::Int,
         k = _poisson(rng, mm.morgan[c], mm.emorgan[c])
         resize!(xo, k)
         for t = 1:k
-            xo[t] = rand(rng, mm.first[c]:mm.last[c])
+            xo[t] = keyed_int(rng, mm.first[c], mm.last[c])
         end
         k > 1 && sort!(xo; alg = InsertionSort)
         if phases !== nothing
