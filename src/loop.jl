@@ -315,6 +315,10 @@ function step!(pop::Population, sc::Scheme, mm::MeiosisMap)
     return merge(generation_summary(pop, g), (accuracy = acc, nsire = length(s), ndam = length(d)))
 end
 
+# mean coancestry of the founders, self included: they are unrelated and
+# non-inbred, so it is 1/(2n₀)
+θ0(pop::Population) = 1 / (2 * length(generation_ids(pop, 0)))
+
 """
     generation_summary(pop::Population, g) -> NamedTuple
 
@@ -335,10 +339,6 @@ is the mean coancestry ``\\bar\\theta_g``. Under selection,
 linked to QTL; both carry drift noise that is large when few chromosome
 segments segregate.
 """
-# mean coancestry of the founders, self included: they are unrelated and
-# non-inbred, so it is 1/(2n₀)
-θ0(pop::Population) = 1 / (2 * length(generation_ids(pop, 0)))
-
 function generation_summary(pop::Population, g::Integer)
     ids = generation_ids(pop, g)
     hap = pop.blocks[g+1]
