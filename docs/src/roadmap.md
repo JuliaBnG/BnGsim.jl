@@ -60,7 +60,7 @@ a dependency, and BnGsim does not aim for API compatibility with them.
 Sequence-level forward simulation belongs in FisherWright (or SLiM), not
 here.
 
-## 2. Current status (v0.3.0, in progress)
+## 2. Current status (v0.4.0, in progress)
 
 | Area | State |
 | :--- | :--- |
@@ -71,13 +71,14 @@ here.
 | Sampling | `sample_id`, `sample_loci` (MAF-filtered chip and QTL `LocusSet`s). |
 | Traits | `eqtl` (effects scaled only, mean in the intercept, each trait's `da` honoured, realised covariance exact in the base population), `trait_summary`, `tbv!`, `phenotype!` (correlated residuals, sex-limited expression, threshold traits from a liability scale), `dummy_traits`. |
 | Provenance | `provenance` (Breeding is listed when loaded) writes a text header with the date, host, CPU, threads, seed and package versions/commits. This partly covers I2: there is no JSON manifest yet. |
-| Not started | Scenario schema, `IndividualStore`/`PedigreeView`, selection and evaluation loop, lifecycle, checkpoints, CLI, adapter layer. |
+| Breeding loop | `Population` (ids equal rows; nothing is removed yet), `Scheme`, `step!`/`simulate!`: discrete generations, one additive trait, evaluation through Breeding.jl (`:tbv`, `:phenotype`, `:pblup`, `:gblup`), selection by truncation, `TM1997`, `rocs` or at random, `(criterion, id)` ranking, keyed pairing and meiosis, per-generation summaries. |
+| Not started | Scenario schema, `PedigreeView` (needed once animals are removed), several traits, lifecycle, checkpoints, CLI, adapter layer. |
 
-Meiosis through `make_progeny!` is keyed by coordinate (§4.2): a draw
-depends on its `SimKey` only, not on thread count or call order. The
-other stochastic functions still take an explicit `rng`, so their draws
-depend on the order of the calls that precede them; they are moved to
-`SimKey` as the breeding loop takes them over.
+The breeding loop is keyed by coordinate (§4.2): meiosis, sexes,
+phenotypes, random selection and pairing each draw from their own
+`SimKey`, and integers are sampled from raw 64-bit outputs
+(`keyed_int`), so a run is identical at any thread count and on Julia
+1.10 and 1.13. The older building blocks still take an explicit `rng`.
 
 ## 3. Design invariants
 

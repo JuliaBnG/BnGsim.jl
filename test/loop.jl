@@ -127,4 +127,19 @@
     @test dr.F[2] == 0                        # offspring of unrelated founders
     @test dr.F[end] > dr.F[3] > 0
     @test dr.Fhet[end] > 0
+    # Without selection the loss of heterozygosity has the pedigree mean
+    # coancestry as its expectation: paired over 12 replicates of 6
+    # generations on a 10-chromosome genome, within 4 s.e.
+    sp10 = GenericSpecies("ten", fill(10_000_000, 10))
+    r10 = Xoshiro(7)
+    vm10 = VariantMap(sort(unique(rand(r10, 1:100_000_000, 3000))), sp10)
+    h10 = Haplotype(BitMatrix(rand(r10, Bool, length(vm10), 300)))
+    q10 = eqtl(h10, 1:5:length(vm10), t; rng = r10)
+    mm10 = MeiosisMap(sp10, vm10)
+    dif = map(1:12) do r
+        p = founder_population(h10, q10, t, SimKey(key; replicate = r))
+        df = simulate!(p, Scheme(; noff = 150, nsire = 8, ndam = 30, evaluation = :tbv, selection = :random), mm10, 6)
+        df.Fhet[end] - df.coancestry[end]
+    end
+    @test abs(mean(dif)) < 4 * std(dif) / sqrt(12)
 end

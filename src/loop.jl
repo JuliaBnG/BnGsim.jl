@@ -320,19 +320,34 @@ end
 
 For generation `g`: its size, mean and variance of the genetic values,
 genic variance ``\\sum 2p(1-p)a^2`` at the QTL, mean pedigree inbreeding
-``F`` (founders unrelated and non-inbred) and the loss of heterozygosity
-``1 - \\bar H_g / \\bar H_0`` over all loci, ``\\bar H`` the mean expected
-heterozygosity ``2p(1-p)``; under drift alone its expectation is the
-mean ``F`` of the gametes that form the generation.
+`F` and mean pedigree `coancestry` ``\\bar\\theta_g`` over all pairs of
+the generation, self-coancestry ``(1 + F_i)/2`` included (founders
+unrelated and non-inbred), and the loss of heterozygosity `Fhet`.
+
+`Fhet` is ``1 - (1 - \\bar\\theta_0)\\,\\bar H_g/\\bar H_0`` over all loci, with
+``\\bar H`` the mean of ``2p(1-p)`` from the generation's own allele
+frequencies and ``\\bar\\theta_0 = 1/(2n_0)`` the founders' mean
+coancestry. Each ``\\bar H_g`` is a sample estimate whose expectation is
+``H(1 - \\bar\\theta_g)``, ``H`` the heterozygosity of the population the
+founders were drawn from, so without selection the expectation of `Fhet`
+is the mean coancestry ``\\bar\\theta_g``. Under selection,
+`Fhet − coancestry` measures the extra loss of heterozygosity at loci
+linked to QTL; both carry drift noise that is large when few chromosome
+segments segregate.
 """
+# mean coancestry of the founders, self included: they are unrelated and
+# non-inbred, so it is 1/(2n₀)
+θ0(pop::Population) = 1 / (2 * length(generation_ids(pop, 0)))
+
 function generation_summary(pop::Population, g::Integer)
     ids = generation_ids(pop, g)
     hap = pop.blocks[g+1]
     F = nrm_diag(pop.sire, pop.dam)[ids] .- 1
+    θ = mean(nrm(pop.sire, pop.dam, ids)) / 2             # mean coancestry, self included
     H(h) = (p = vec(sum(dosage(h, 1:h.nlc); dims = 2)) ./ h.nhp; mean(2 .* p .* (1 .- p)))
     s = trait_summary(hap, pop.qtl)
     (generation = Int(g), n = length(ids), mean = s.mean[1], var = s.var[1], genic = s.genic[1],
-        F = mean(F), Fhet = 1 - H(hap) / H(pop.blocks[1]))
+        F = mean(F), coancestry = θ, Fhet = 1 - (1 - θ0(pop)) * H(hap) / H(pop.blocks[1]))
 end
 
 """
