@@ -1,6 +1,6 @@
 # BnGsim.jl release notes
 
-## v0.7.0 (unreleased)
+## v0.7.0 (2026-11-16)
 
 Fifth part of M3: survival, culling and single-step GBLUP.
 
