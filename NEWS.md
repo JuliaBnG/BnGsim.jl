@@ -1,5 +1,43 @@
 # BnGsim.jl release notes
 
+## v0.9.0 (unreleased)
+
+Realized IBD (M5, BnGsim side): founder segments from the loop's
+crossover records.
+
+### Breaking
+
+- `Population` has a new field `meioses` (per cohort, the crossover
+  records or `nothing`).
+- Requires RelationshipMatrices 0.7.1 (segment-level IBD).
+
+### New
+
+- `Scheme(; record_meiosis = true)`: keep each cohort's `MeiosisRecord`,
+  parents as population ids (about 8 bytes per crossover). The run is
+  unchanged by recording.
+- `meioses(pop)`: the records as `RelationshipMatrices.Meioses`.
+- `founder_segments(pop, mm)`: the founder haplotype of every base of
+  every animal (`RelationshipMatrices.HaplotypeSegments`); with it
+  `irm(segs)` is the realized IBD relationship matrix and
+  `segment_inbreeding(segs)` the realized inbreeding, without sampling
+  loci.
+
+### Validation
+
+- Tests: at every locus every haplotype carries the allele of the
+  founder haplotype its segment names (60 founders, 4 steps, overlapping
+  generations); founders unrelated and parent–offspring relationships of
+  founders' offspring exactly ½.
+- `validation/ibd.jl`: realized relationships of paternal half sibs and
+  full sibs from BnGsim's meiosis against their exact mean and variance
+  under Haldane's map, on a genome with unequal cM/Mb (50/100/150 Mb at
+  0.5/1.5/1.0 M), 400 replicates
+  (`validation/results/ibd-2026-11-17.txt`): half sibs (n = 32 734) mean
+  0.2495 (theory 0.25, s.e. 0.0005), variance 0.008812 (theory 0.008811,
+  s.e. 0.000059); full sibs (n = 7248) mean 0.4989 (0.5, 0.0016), variance
+  0.01740 (0.01762, 0.00027).
+
 ## v0.8.0 (2026-11-17)
 
 Sixth part of M3: optimum contribution selection with a target rate of

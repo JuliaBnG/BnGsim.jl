@@ -48,7 +48,10 @@ Fields:
 - `qtl` (one `TraitQTL` per trait), `traits`, `Lr` (lower-triangular
   factor of the true residual covariance matrix, ``R = L_rL_r'``), `key`;
 - `G0`, `R0`: the genetic and residual covariance matrices of the next
-  evaluation (the true ones of the founders unless re-estimated).
+  evaluation (the true ones of the founders unless re-estimated);
+- `meioses`: the crossover records of each cohort (`meioses[t]` for
+  cohort `t ≥ 1`, parents as population ids) when the scheme records
+  them, `nothing` otherwise; see [`founder_segments`](@ref).
 
 Build one with [`founder_population`](@ref), extend it with
 [`step!`](@ref), and save or restore it with [`save_checkpoint`](@ref)
@@ -71,6 +74,7 @@ mutable struct Population
     key::SimKey
     G0::Matrix{Float64}
     R0::Matrix{Float64}
+    meioses::Vector{Union{Nothing,MeiosisRecord}}
 end
 
 Base.length(pop::Population) = length(pop.sire)
@@ -141,7 +145,8 @@ function _founders(hap, qs, traits, key, Re)
     G0 = σa .* C .* σa'
     R0 = σe .* Re .* σe'
     pop = Population(zeros(Int32, n), zeros(Int32, n), falses(n), zeros(Int32, n), fill(typemax(Int32), n), G,
-        fill(NaN, size(G)), fill(NaN, size(G)), [hap], [1], qs, traits, Lr, key, G0, R0)
+        fill(NaN, size(G)), fill(NaN, size(G)), [hap], [1], qs, traits, Lr, key, G0, R0,
+        Union{Nothing,MeiosisRecord}[])
     _sexes!(pop, 1:n, 0)
     _phenotypes!(pop, 1:n, 0)
     return pop
@@ -227,7 +232,7 @@ end
            K = NaN, λ = 0.0, κ = 0.0, ub = 1.0, chip = Int32[], blend = 0.05,
            max_sire_age = 0, max_dam_age = 0, reml = false, weights = Float64[],
            survival = Float64[], cull_unselected = false, genotyped_cohorts = 0,
-           ocs = :fixed, ΔF = NaN)
+           ocs = :fixed, ΔF = NaN, record_meiosis = false)
 
 A selection and mating scheme, applied every time step:
 
@@ -290,6 +295,9 @@ A selection and mating scheme, applied every time step:
   the same with the generation interval of the contributions being chosen
   (a per-generation constraint, Sonesson et al. 2000). With discrete
   generations the three coincide;
+- `record_meiosis`: keep the crossover records of every cohort in
+  `pop.meioses`, for realized IBD from founder segments
+  ([`founder_segments`](@ref)); about 8 bytes per crossover;
 - `survival`: `survival[a + 1]` is the probability that an animal alive
   at age `a` survives to age `a + 1` (the last entry for all older ages;
   empty: no deaths). Deaths are drawn between steps (`Domain.SURVIVAL`),
@@ -325,8 +333,10 @@ Base.@kwdef struct Scheme
     genotyped_cohorts::Int = 0
     ocs::Symbol = :fixed
     ΔF::Float64 = NaN
+    record_meiosis::Bool = false
     function Scheme(noff, nsire, ndam, evaluation, selection, K, λ, κ, ub, chip, blend,
-        max_sire_age, max_dam_age, reml, weights, survival, cull_unselected, genotyped_cohorts, ocs, ΔF)
+        max_sire_age, max_dam_age, reml, weights, survival, cull_unselected, genotyped_cohorts, ocs, ΔF,
+        record_meiosis)
         noff > 1 && nsire > 0 && ndam > 0 || throw(ArgumentError("noff > 1, nsire > 0 and ndam > 0 are required"))
         max_sire_age >= 0 && max_dam_age >= 0 || throw(ArgumentError("maximum ages must be non-negative"))
         reml && !(evaluation in (:pblup, :gblup, :ssgblup)) &&
@@ -350,7 +360,7 @@ Base.@kwdef struct Scheme
             throw(ArgumentError("weights must be finite and not all zero"))
         new(noff, nsire, ndam, evaluation, selection, K, λ, κ, ub, Int32.(chip), blend,
             max_sire_age, max_dam_age, reml, Float64.(weights), Float64.(survival), cull_unselected,
-            genotyped_cohorts, ocs, ΔF)
+            genotyped_cohorts, ocs, ΔF, record_meiosis)
     end
 end
 
@@ -648,7 +658,13 @@ function step!(pop::Population, sc::Scheme, mm::MeiosisMap)
     parents = _haplotypes(pop, ups)
     off = Haplotype(parents.nlc, 2sc.noff)
     local_plan = map(i -> searchsortedfirst(ups, i), plan)
-    make_progeny!(off, parents, local_plan, mm, SimKey(pop.key; generation = g + 1))
+    if sc.record_meiosis
+        _, r = make_progeny!(off, parents, local_plan, mm, SimKey(pop.key; generation = g + 1); record = true)
+        push!(pop.meioses, MeiosisRecord(ups[r.parent], r.phase, r.ptr, r.pos))
+    else
+        make_progeny!(off, parents, local_plan, mm, SimKey(pop.key; generation = g + 1))
+        push!(pop.meioses, nothing)
+    end
     n0 = length(pop)
     ids = (n0+1):(n0+sc.noff)
     k = ntraits(pop)
@@ -839,4 +855,50 @@ function load_checkpoint(path::AbstractString; strict::Bool = true)
         pop isa Population || throw(ArgumentError("$path does not hold a Population"))
         return pop
     end
+end
+
+# ---- realized IBD from founder segments --------------------------------
+
+"""
+    meioses(pop::Population) -> RelationshipMatrices.Meioses
+
+The crossover records of all cohorts in the form of
+`RelationshipMatrices.Meioses`: gamete `2k − 1` of the `k`-th animal of a
+cohort is its haplotype from the sire, `2k` from the dam. Every cohort
+must have been recorded (`Scheme(; record_meiosis = true)` from the
+first step on).
+"""
+function meioses(pop::Population)
+    any(isnothing, pop.meioses) &&
+        throw(ArgumentError("some cohorts were bred without record_meiosis = true; their founder segments are unknown"))
+    parent, hap, phases, ptr, pos = Int32[], Int32[], BitMatrix[], [1], UInt32[]
+    for (t, r) in enumerate(pop.meioses)
+        f = pop.first[t+1]
+        for g in eachindex(r.parent)
+            push!(parent, r.parent[g])
+            push!(hap, 2(f + (g + 1) ÷ 2 - 1) - isodd(g))
+            xo = crossovers(r, g)
+            append!(pos, xo)
+            push!(ptr, ptr[end] + length(xo))
+        end
+        push!(phases, r.phase)
+    end
+    phase = isempty(phases) ? falses(0, 0) : reduce(hcat, phases)
+    Meioses(parent, hap, phase, ptr, pos)
+end
+
+"""
+    founder_segments(pop::Population, mm::MeiosisMap) -> RelationshipMatrices.HaplotypeSegments
+
+The founder haplotype of every base of every animal, reconstructed from
+the recorded meioses (see [`meioses`](@ref)) and the pedigree, on the
+chromosomes of `mm`. Founder haplotype `h` is haplotype `h` of cohort 0.
+`RelationshipMatrices.irm(segs)` gives the realized IBD relationship
+matrix and `segment_inbreeding(segs)` the realized inbreeding, without
+sampling loci.
+"""
+function RelationshipMatrices.founder_segments(pop::Population, mm::MeiosisMap)
+    nchr = length(mm.first)
+    m = isempty(pop.meioses) ? Meioses(Int32[], Int32[], falses(nchr, 0), [1], UInt32[]) : meioses(pop)
+    founder_segments(pop.sire, pop.dam, m, [mm.first[c]:mm.last[c] for c = 1:nchr])
 end
