@@ -192,7 +192,8 @@ function evaluate!(pop::Population, sc::Scheme)
     else
         H = _haplotypes(pop, 1:n)
         base = pop.blocks[1]                                  # the founders
-        p = vec(sum(dosage(base, sc.chip); dims = 2)) ./ base.nhp
+        p = zeros(base.nlc)                                   # grm wants one per locus
+        p[sc.chip] = vec(sum(dosage(base, sc.chip); dims = 2)) ./ base.nhp
         G = grm(H; p = p, loci = sc.chip)
         sc.blend > 0 && (G = (1 - sc.blend) .* G .+ sc.blend .* nrm(pop.sire, pop.dam))
         inv(cholesky(Symmetric(G)))

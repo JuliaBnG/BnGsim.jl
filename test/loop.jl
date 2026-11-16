@@ -82,6 +82,10 @@
     gb = Scheme(; noff = 100, nsire = 5, ndam = 20, evaluation = :gblup, chip = 1:nlc, blend = 0.0)
     evaluate!(pb, gb)
     @test cor(pb.ebv, pb.tbv) > 0.3
+    # a chip that is a subset of the loci, with founder allele frequencies
+    gs = Scheme(; noff = 100, nsire = 5, ndam = 20, evaluation = :gblup, chip = 2:2:nlc)
+    evaluate!(pb, gs)
+    @test cor(pb.ebv, pb.tbv) > 0.3
 
     # ---- OCS and ROCS -------------------------------------------------------
     po, _ = run(Scheme(; noff = 200, nsire = 10, ndam = 50, evaluation = :tbv), 2)
