@@ -38,6 +38,16 @@ using Random123: Random123
     @test SimKey(k; entity = 8).entity == 8 && SimKey(k; entity = 8).seed == k.seed
     @test occursin("entity = 7", sprint(show, k))
 
+    # Version-independent integers: exact range, uniform, golden values
+    r = keyed_rng(k)
+    xs = [keyed_int(r, 3, 9) for _ = 1:70_000]
+    @test extrema(xs) == (3, 9)
+    @test all(abs(count(==(v), xs) - 10_000) < 4 * sqrt(10_000 * 6 / 7) for v = 3:9)
+    @test [keyed_int(keyed_rng(k), UInt32(1), UInt32(3_000_000_000)) for _ = 1:1] == [GOLDEN_INT]
+    @test keyed_shuffle!(keyed_rng(k), collect(1:12)) == GOLDEN_SHUFFLE
+    @test sort(keyed_shuffle!(keyed_rng(k), collect(1:100))) == 1:100
+    @test keyed_int(keyed_rng(k), 5, 5) == 5
+
     # Streams of neighbouring coordinates are not correlated: the first
     # uniform of 20 000 consecutive entities, mean ½ and lag-1 correlation 0
     # (4 standard errors)
