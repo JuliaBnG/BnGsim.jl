@@ -24,6 +24,7 @@ include("loop.jl")
 include("lifecycle.jl")
 include("multitrait.jl")
 include("survival.jl")
+include("ocs.jl")
 
 @testset "Aqua" begin
     Aqua.test_all(BnGsim)

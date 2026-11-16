@@ -19,6 +19,7 @@ include("keys.jl")
 include("reproduction.jl")
 include("meiosis.jl")
 include("loop.jl")
+include("ocs.jl")
 include("traits.jl")
 include("base-populations.jl")
 include("provenance.jl")
@@ -34,7 +35,7 @@ export SimKey, Domain, keyed_rng, philox4x64, keyed_int, keyed_shuffle!
 export MeiosisMap, MeiosisRecord, make_progeny!, ncrossovers
 export Population, founder_population, Scheme, evaluate!, select_parents, mating_plan, step!, simulate!
 export generation_summary, ngenerations, generation_ids, current_step, recorded, observed, ntraits, index_weights,
-    alive, genotyped
+    alive, genotyped, ocs_contributions
 export save_checkpoint, load_checkpoint
 export HistoricalSpec, historical_population, continue_population, founder_haplotypes
 export read_packed_haplotypes, write_xy

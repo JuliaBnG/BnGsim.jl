@@ -1,0 +1,24 @@
+# validation/ocs-overlap.jl, local PC (Ryzen 9 3900X), 2026-11-16, Julia 1.13.4, 8 processes × 2 threads,
+# 100 replicates per scenario (1-100), 20 steps, target ΔF = 0.01 per generation; pooled with validation/ocs-overlap-pool.jl
+# per-replicate metrics: ocs-overlap-<scenario>-2026-11-16.csv (replicate, method, ΔF/gen, Δθ/gen, gain/year, L, parents, infeasible steps)
+# code: branch m3-ocs (its Project.toml still said 0.7.0 when these ran; released as 0.8.0)
+
+## scenario birth
+# pooled: 100 replicates (1 to 100)
+method               ΔF/generation      Δθ/generation          gain/year              L    parents infeasible
+cohort             0.0103 (0.0001)    0.0104 (0.0000)    0.2798 (0.0047)   1.27 (0.00)       63.3       0.00
+age_year           0.0104 (0.0001)    0.0107 (0.0000)    0.2707 (0.0050)   1.28 (0.00)       58.5       0.00
+age_generation     0.0100 (0.0001)    0.0102 (0.0000)    0.2823 (0.0048)   1.29 (0.00)       60.3       0.00
+truncation         0.0499 (0.0009)    0.0499 (0.0009)    0.2056 (0.0065)   1.28 (0.00)       33.0       0.00
+cohort          − age_year: ΔF/gen -0.0001 (0.0001), Δθ/gen -0.0003 (0.0000), gain/year +0.0091 (0.0049), L -0.015 (0.004)
+age_generation  − age_year: ΔF/gen -0.0004 (0.0001), Δθ/gen -0.0005 (0.0000), gain/year +0.0116 (0.0051), L +0.013 (0.005)
+
+## scenario age1
+# pooled: 100 replicates (1 to 100)
+method               ΔF/generation      Δθ/generation          gain/year              L    parents infeasible
+cohort             0.0107 (0.0001)    0.0106 (0.0000)    0.2194 (0.0042)   2.36 (0.00)       60.5       0.00
+age_year           0.0109 (0.0001)    0.0105 (0.0001)    0.2197 (0.0038)   2.19 (0.00)       42.5       0.00
+age_generation     0.0104 (0.0001)    0.0107 (0.0001)    0.2293 (0.0043)   2.19 (0.00)       44.0       0.00
+truncation         0.0585 (0.0018)    0.0586 (0.0018)    0.2049 (0.0069)   1.66 (0.01)       33.0       0.00
+cohort          − age_year: ΔF/gen -0.0002 (0.0002), Δθ/gen +0.0001 (0.0001), gain/year -0.0003 (0.0039), L +0.169 (0.004)
+age_generation  − age_year: ΔF/gen -0.0005 (0.0002), Δθ/gen +0.0002 (0.0001), gain/year +0.0096 (0.0041), L -0.000 (0.004)

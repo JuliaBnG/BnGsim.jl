@@ -226,7 +226,8 @@ end
     Scheme(; noff, nsire, ndam, evaluation = :pblup, selection = :truncation,
            K = NaN, λ = 0.0, κ = 0.0, ub = 1.0, chip = Int32[], blend = 0.05,
            max_sire_age = 0, max_dam_age = 0, reml = false, weights = Float64[],
-           survival = Float64[], cull_unselected = false, genotyped_cohorts = 0)
+           survival = Float64[], cull_unselected = false, genotyped_cohorts = 0,
+           ocs = :fixed, ΔF = NaN)
 
 A selection and mating scheme, applied every time step:
 
@@ -250,8 +251,8 @@ A selection and mating scheme, applied every time step:
   aggregate genotype ``H = w'g`` (Henderson 1963). With `:phenotype` it is
   ``w'y``, a fixed-weight index, not the optimal phenotypic index;
 - `selection`: `:truncation` (best `nsire` males and `ndam` females on
-  the index, equal numbers of offspring), `:ocs` (`Breeding.TM1997` with
-  ``c'Ac \\le K``, i.e. average coancestry ``K/2``), `:rocs`
+  the index, equal numbers of offspring), `:ocs` (optimum contributions;
+  see `ocs` below), `:rocs`
   (`Breeding.rocs` with `λ`, `κ`, the prediction error covariance of the
   candidates' index as `Ω`, and an upper bound `ub` on each parent's
   contribution, in `rocs` units where each sex contributes ½;
@@ -278,6 +279,17 @@ A selection and mating scheme, applied every time step:
   `Breeding.reml`), which keeps the estimates positive definite; early
   estimates may lie on the boundary (e.g. a genetic correlation near ±1
   after one cohort);
+- `ocs`: the constraint of `:ocs`. `:fixed`: `Breeding.TM1997` with
+  ``c'Ac \\le K`` at every step (average coancestry ``K/2``). The others
+  hold the rate of inbreeding at the target `ΔF` per generation
+  (see [`ocs_contributions`](@ref)): `:cohort` constrains the mean kinship
+  of the newborn cohort; `:age_year` the mean kinship of the population
+  at the next step, age classes weighted by their remaining expected
+  contributions (Meuwissen & Sonesson 1998; optiSel), with the per-step
+  increase set by the estimated generation interval; `:age_generation`
+  the same with the generation interval of the contributions being chosen
+  (a per-generation constraint, Sonesson et al. 2000). With discrete
+  generations the three coincide;
 - `survival`: `survival[a + 1]` is the probability that an animal alive
   at age `a` survives to age `a + 1` (the last entry for all older ages;
   empty: no deaths). Deaths are drawn between steps (`Domain.SURVIVAL`),
@@ -311,8 +323,10 @@ Base.@kwdef struct Scheme
     survival::Vector{Float64} = Float64[]
     cull_unselected::Bool = false
     genotyped_cohorts::Int = 0
+    ocs::Symbol = :fixed
+    ΔF::Float64 = NaN
     function Scheme(noff, nsire, ndam, evaluation, selection, K, λ, κ, ub, chip, blend,
-        max_sire_age, max_dam_age, reml, weights, survival, cull_unselected, genotyped_cohorts)
+        max_sire_age, max_dam_age, reml, weights, survival, cull_unselected, genotyped_cohorts, ocs, ΔF)
         noff > 1 && nsire > 0 && ndam > 0 || throw(ArgumentError("noff > 1, nsire > 0 and ndam > 0 are required"))
         max_sire_age >= 0 && max_dam_age >= 0 || throw(ArgumentError("maximum ages must be non-negative"))
         reml && !(evaluation in (:pblup, :gblup, :ssgblup)) &&
@@ -323,7 +337,11 @@ Base.@kwdef struct Scheme
         genotyped_cohorts >= 0 || throw(ArgumentError("genotyped_cohorts must be non-negative"))
         selection in (:truncation, :ocs, :rocs, :random) ||
             throw(ArgumentError("selection must be :truncation, :ocs, :rocs or :random"))
-        selection == :ocs && !(K > 0) && throw(ArgumentError(":ocs needs a constraint K > 0"))
+        ocs in (:fixed, :cohort, :age_year, :age_generation) ||
+            throw(ArgumentError("ocs must be :fixed, :cohort, :age_year or :age_generation"))
+        selection == :ocs && ocs == :fixed && !(K > 0) && throw(ArgumentError(":ocs needs a constraint K > 0"))
+        selection == :ocs && ocs != :fixed && !(0 < ΔF < 1) &&
+            throw(ArgumentError("ocs = :$ocs needs a target 0 < ΔF < 1 per generation"))
         evaluation in (:gblup, :ssgblup) && isempty(chip) &&
             throw(ArgumentError(":$evaluation needs chip loci"))
         0 <= blend < 1 || throw(ArgumentError("blend must lie in [0, 1)"))
@@ -332,7 +350,7 @@ Base.@kwdef struct Scheme
             throw(ArgumentError("weights must be finite and not all zero"))
         new(noff, nsire, ndam, evaluation, selection, K, λ, κ, ub, Int32.(chip), blend,
             max_sire_age, max_dam_age, reml, Float64.(weights), Float64.(survival), cull_unselected,
-            genotyped_cohorts)
+            genotyped_cohorts, ocs, ΔF)
     end
 end
 
@@ -529,7 +547,7 @@ function _eligible(pop::Population, sc::Scheme, g)
 end
 
 """
-    select_parents(pop::Population, scheme::Scheme, m) -> (sires, nsire_off, dams, ndam_off)
+    select_parents(pop::Population, scheme::Scheme, m) -> (sires, nsire_off, dams, ndam_off, info)
 
 Parents and their numbers of offspring (each list summing to
 `scheme.noff`), among the living males of age at most
@@ -539,7 +557,11 @@ the current time step (the youngest cohort only, with the default ages
 ``w'\\hat a`` (see [`Scheme`](@ref)). `m` is the `MME` returned by
 [`evaluate!`](@ref) (`nothing` for `:tbv` and `:phenotype`); `:rocs` takes
 the prediction error covariance of the candidates' index from it. Every
-ranking breaks ties by ascending id (invariant I1a).
+ranking breaks ties by ascending id (invariant I1a). `info` is empty
+except for the dynamic OCS constraints, where it holds the bound, the
+constrained kinship reached, the generation interval used and whether
+the bound could be met (`ocs_bound`, `ocs_kinship`, `ocs_L`,
+`ocs_feasible`).
 """
 function select_parents(pop::Population, sc::Scheme, m)
     g = current_step(pop)
@@ -558,13 +580,17 @@ function select_parents(pop::Population, sc::Scheme, m)
         d = _best(females, crit[females], sc.ndam)
         s = sort(s)
         d = sort(d)
-        return s, _allocate(s, ones(length(s)), sc.noff), d, _allocate(d, ones(length(d)), sc.noff)
+        return s, _allocate(s, ones(length(s)), sc.noff), d, _allocate(d, ones(length(d)), sc.noff), NamedTuple()
     end
     A = nrm(pop.sire, pop.dam, cand)
     u = index[cand]
     sex = Int.(pop.male[cand])
-    c = if sc.selection == :ocs
+    info = NamedTuple()
+    c = if sc.selection == :ocs && sc.ocs == :fixed
         2 .* TM1997(u, sex, A, sc.K)
+    elseif sc.selection == :ocs
+        cc, info = _dynamic_ocs(pop, sc, g, cand, u)
+        2 .* cc
     else
         Ω = m === nothing ? zeros(length(cand), length(cand)) : _pev_index(m, cand, w, length(pop))
         2 .* rocs(u, A; Ω = Ω, sex = sex, λ = sc.λ, κ = sc.κ, ub = sc.ub).w
@@ -574,7 +600,7 @@ function select_parents(pop::Population, sc::Scheme, m)
     s, d = cand[ms], cand[fs]
     ns, nd = _allocate(s, c[ms], sc.noff), _allocate(d, c[fs], sc.noff)
     keep_s, keep_d = ns .> 0, nd .> 0
-    return s[keep_s], ns[keep_s], d[keep_d], nd[keep_d]
+    return s[keep_s], ns[keep_s], d[keep_d], nd[keep_d], info
 end
 
 """
@@ -612,7 +638,7 @@ function step!(pop::Population, sc::Scheme, mm::MeiosisMap)
     m = evaluate!(pop, sc)
     cand = generation_ids(pop, g)
     acc = _accuracies(pop, cand, w)
-    s, ns, d, nd = select_parents(pop, sc, m)
+    s, ns, d, nd, info = select_parents(pop, sc, m)
     plan = mating_plan(pop, s, ns, d, nd)
     L = mean(g + 1 .- pop.generation[plan])
     _cull_and_survive!(pop, sc, g, [s; d])
@@ -639,8 +665,11 @@ function step!(pop::Population, sc::Scheme, mm::MeiosisMap)
     _sexes!(pop, ids, g + 1)
     _phenotypes!(pop, ids, g + 1)
     return merge(generation_summary(pop, g; weights = w), acc,
-        (nsire = length(s), ndam = length(d), L = L), _vc(pop))
+        (nsire = length(s), ndam = length(d), L = L), _vc(pop), info)
 end
+
+_no_ocs(sc::Scheme) = sc.selection == :ocs && sc.ocs != :fixed ?
+    (ocs_bound = NaN, ocs_kinship = NaN, ocs_L = NaN, ocs_feasible = true) : NamedTuple()
 
 # Between steps g and g + 1: culling of unselected adults, then deaths.
 # An animal alive at g of age a survives to g + 1 with probability
@@ -758,7 +787,7 @@ function simulate!(pop::Population, sc::Scheme, mm::MeiosisMap, nstep::Integer; 
         r
     end
     last = merge(generation_summary(pop, current_step(pop); weights = index_weights(pop, sc)),
-        _no_accuracy(pop), (nsire = 0, ndam = 0, L = NaN), _vc(pop))
+        _no_accuracy(pop), (nsire = 0, ndam = 0, L = NaN), _vc(pop), _no_ocs(sc))
     return DataFrame([rows; last])
 end
 
