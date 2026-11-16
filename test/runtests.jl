@@ -5,6 +5,14 @@ using BnGStructs
 using Distributions
 using DataFrames
 using Random
+using Statistics
+using StatsBase: sample
+
+# Checksum of the offspring in the golden meiosis test (test/meiosis.jl)
+const GOLDEN_MEIOSIS = 0xf111822b4a8deb93
+
+include("keys.jl")
+include("meiosis.jl")
 
 @testset "Aqua" begin
     Aqua.test_all(BnGsim)

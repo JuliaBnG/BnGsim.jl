@@ -13,7 +13,9 @@ using Random
 using Statistics
 using StatsBase: sample
 
+include("keys.jl")
 include("reproduction.jl")
+include("meiosis.jl")
 include("traits.jl")
 include("base-populations.jl")
 include("provenance.jl")
@@ -25,6 +27,8 @@ export random_mate, rnd_ped, expand, sample_id, sampleID, sample_loci, sampleLoc
 export norm_mv!, eqtl, tbv!, phenotype!, dummy_traits
 export FounderPopulation, sample_founder_population
 export provenance
+export SimKey, Domain, keyed_rng, philox4x64
+export MeiosisMap, MeiosisRecord, make_progeny!, ncrossovers
 export HistoricalSpec, historical_population, continue_population, founder_haplotypes
 export read_packed_haplotypes, write_xy
 export ld_decay, vanraden_g, founder_summary
