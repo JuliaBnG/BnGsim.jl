@@ -1,5 +1,61 @@
 # BnGsim.jl release notes
 
+## v0.6.0 (2026-11-16)
+
+Fourth part of M3: several traits, selection on an index.
+
+### Breaking
+
+- `Population` holds `tbv`, `phenotype` and `ebv` as `n × k` matrices, one
+  column per trait (single-trait code: `pop.tbv[:, 1]`). `trait`, `σe` and
+  `vc` are replaced by `traits`, `Lr` (factor of the true residual
+  covariance), `G0` and `R0` (the covariance components of the next
+  evaluation); `qtl` is a vector of one `TraitQTL` per trait.
+- With several traits, `step!`/`simulate!` report `mean`, `var`, `genic`
+  and `accuracy` of the index or aggregate genotype, and per-trait columns
+  (`mean_<name>`, `var_<name>`, `accuracy_<name>`, `va_<name>`,
+  `ve_<name>`, `rg_<a>_<b>`). Single-trait output is unchanged.
+
+### New
+
+- `founder_population(hap, ::MultiTraitQTL, traits, key; Re)`: several
+  traits with residual correlation `Re`; the evaluation starts from the
+  founders' genetic covariance (exactly the `R` of a multi-trait `eqtl`).
+  The first trait's phenotypes are those of a single-trait run.
+- Multi-trait PBLUP and GBLUP (Breeding.jl): records stacked trait-major,
+  an intercept per trait, residuals correlated within animals, missing
+  records (sex- or age-limited) handled exactly. A trait without records
+  yet is predicted through `G0`.
+- Multi-trait AI-REML with `reml = true`, from the first step with every
+  trait recorded on an animal of known parentage; refused when two traits
+  are never recorded on the same animal. Steps are taken on the Cholesky
+  factors (`param = :cholesky`): after one cohort the maximum is often on
+  the boundary (singular `G0`), where natural-scale AI steps were rejected
+  and the EM fall-back did not converge in 100 iterates.
+- `Scheme(; weights)`: selection on the index `w'â` (truncation, OCS,
+  ROCS); ROCS takes the prediction error covariance of the index over all
+  trait components. `generation_summary(pop, g; weights)` reports the
+  aggregate genotype `H = w'g`.
+- `observed`, `ntraits`, `index_weights`; `recorded(pop, t; trait)`.
+
+### Validation
+
+- Tests: founder covariances; multi-trait PBLUP with female-only records
+  of one trait against a dense solve; truncation on the index; the
+  prediction error covariance of the index against `pev_candidates` and a
+  dense inverse; a trait without records predicted through `G0`; REML
+  refusal for traits never recorded together; checkpoint–resume with two
+  traits and REML; single-trait golden run unchanged.
+- `validation/mtreml.jl`: multi-trait REML under index selection, one
+  trait recorded in females only, 200 replicates (amd, 2026-11-16,
+  `validation/results/mtreml-2026-11-16.txt`). All six elements of G0 and
+  R0 are within 3 s.e. of the founder values under truncation on the
+  index and under random selection (largest |z| 2.40 and 1.82). Under
+  selection σ²a of the trait recorded in both sexes is 1.6 % low
+  (z = −1.85), the same direction and size as in the single-trait gate.
+  The mean of the ratio r̂g = Ĝab/√(ĜaaĜbb) is 0.52–0.53 against 0.5: a
+  ratio of estimates is not unbiased, and it is not part of the gate.
+
 ## v0.5.0 (2026-11-16)
 
 Third part of M3: overlapping generations, sex- and age-limited records,

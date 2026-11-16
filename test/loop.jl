@@ -23,10 +23,10 @@
     # ---- founders ---------------------------------------------------------
     pop = founder_population(hap, qtl, t, key)
     @test length(pop) == 200 && ngenerations(pop) == 1
-    @test pop.tbv ≈ tbv(hap, qtl)
+    @test pop.tbv[:, 1] ≈ tbv(hap, qtl)
     @test std(pop.tbv) ≈ 1.0 atol = 1e-8
     @test any(pop.male) && !all(pop.male)
-    @test pop.σe ≈ sqrt(0.7 / 0.3)
+    @test pop.R0[1, 1] ≈ 0.7 / 0.3 && pop.Lr[1, 1] ≈ sqrt(0.7 / 0.3)
     @test founder_population(hap, qtl, t, key).phenotype == pop.phenotype     # keyed
     @test founder_population(hap, qtl, t, SimKey(key; replicate = 1)).phenotype != pop.phenotype
     @test_throws ArgumentError Scheme(; noff = 10, nsire = 2, ndam = 2, evaluation = :blup)
@@ -52,7 +52,7 @@
     # truncation, pairing together)
     # (FNV-style fold, not Base.hash, which may change between Julia versions)
     loopsum(p) = foldl((a, x) -> a * 0x100000001b3 ⊻ (x % UInt64),
-        vcat(Int64.(p.sire), Int64.(p.dam), round.(Int64, p.tbv .* 1e6)); init = 0xcbf29ce484222325)
+        vcat(Int64.(p.sire), Int64.(p.dam), round.(Int64, vec(p.tbv) .* 1e6)); init = 0xcbf29ce484222325)
     @test loopsum(p1) == GOLDEN_LOOP
 
     # ---- truncation picks the best by (criterion, id) ----------------------
@@ -72,20 +72,21 @@
     m = evaluate!(pb, Scheme(; noff = 100, nsire = 5, ndam = 20, evaluation = :pblup))
     n = length(pb)
     A = nrm(pb.sire, pb.dam)
-    λ = pb.σe^2 / t.σₐ^2
+    λ = pb.R0[1, 1] / t.σₐ^2
     Z = Matrix{Float64}(I, n, n)
     X = ones(n, 1)
     C = [X'X X'Z; Z'X Z'Z+λ*inv(A)]
-    sol = C \ [X'pb.phenotype; Z'pb.phenotype]
-    @test pb.ebv ≈ sol[2:end] rtol = 1e-8
+    yp = vec(pb.phenotype)
+    sol = C \ [X'yp; Z'yp]
+    @test vec(pb.ebv) ≈ sol[2:end] rtol = 1e-8
     # GBLUP runs on all loci and predicts the genetic values
     gb = Scheme(; noff = 100, nsire = 5, ndam = 20, evaluation = :gblup, chip = 1:nlc, blend = 0.0)
     evaluate!(pb, gb)
-    @test cor(pb.ebv, pb.tbv) > 0.3
+    @test cor(vec(pb.ebv), vec(pb.tbv)) > 0.3
     # a chip that is a subset of the loci, with founder allele frequencies
     gs = Scheme(; noff = 100, nsire = 5, ndam = 20, evaluation = :gblup, chip = 2:2:nlc)
     evaluate!(pb, gs)
-    @test cor(pb.ebv, pb.tbv) > 0.3
+    @test cor(vec(pb.ebv), vec(pb.tbv)) > 0.3
 
     # ---- OCS and ROCS -------------------------------------------------------
     po, _ = run(Scheme(; noff = 200, nsire = 10, ndam = 50, evaluation = :tbv), 2)
