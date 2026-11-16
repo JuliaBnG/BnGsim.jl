@@ -1,0 +1,6 @@
+# bench/meiosis.jl 50000 10000, julia -t 8, 2026-11-16 (branch m3-meiosis)
+# 50000 loci, 10000 offspring, 8 threads, Julia 1.13.4, AMD Ryzen 9 3900X 12-Core Processor
+gene_drop! (v0.2)             0.451 s
+make_progeny!                 0.016 s  (28.4× faster)
+make_progeny!, record         0.019 s
+MeiosisMap, once              0.000 s

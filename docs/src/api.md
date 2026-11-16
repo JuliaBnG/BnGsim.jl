@@ -1,5 +1,5 @@
 # API Reference
 
 ```@autodocs
-Modules = [BnGsim]
+Modules = [BnGsim, BnGsim.Domain]
 ```
