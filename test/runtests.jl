@@ -22,6 +22,7 @@ include("keys.jl")
 include("meiosis.jl")
 include("loop.jl")
 include("lifecycle.jl")
+include("multitrait.jl")
 
 @testset "Aqua" begin
     Aqua.test_all(BnGsim)

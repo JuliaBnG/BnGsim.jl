@@ -20,6 +20,7 @@ blocks:
   PBLUP, GBLUP), selection by truncation, optimum contributions
   (`TM1997`, `rocs`) or at random, keyed mating and meiosis, with
   per-generation summaries; discrete or overlapping generations,
+  several traits with selection on an index of multi-trait EBVs,
   sex- and age-limited records, optional REML re-estimation of the
   variance components, and checkpoints.
 - **Traits:** QTL sampling (`sample_loci`, `eqtl`, which keeps the shape of

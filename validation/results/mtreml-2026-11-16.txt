@@ -1,0 +1,20 @@
+# validation/mtreml.jl on amd (Ryzen 9 5950X), 2026-11-16, replicates 1-200 for both selections.
+# BnGsim 0.6.0, Julia 1.13.4, 16 threads, 200 replicates, selection truncation, 185.0 s
+G_aa  REML mean 0.9837 (s.e. 0.0088), true 1.0000, z = -1.85  
+G_ab  REML mean 0.4920 (s.e. 0.0088), true 0.5000, z = -0.91  
+G_bb  REML mean 0.9772 (s.e. 0.0193), true 1.0000, z = -1.18  
+R_aa  REML mean 2.3165 (s.e. 0.0070), true 2.3333, z = -2.40  
+R_ab  REML mean 0.6055 (s.e. 0.0104), true 0.6110, z = -0.53  
+R_bb  REML mean 3.9956 (s.e. 0.0212), true 4.0000, z = -0.21  
+r_g   mean 0.5201 (s.e. 0.0106), true 0.5000
+gate passed
+
+# BnGsim 0.6.0, Julia 1.13.4, 16 threads, 200 replicates, selection random, 142.0 s
+G_aa  REML mean 0.9943 (s.e. 0.0116), true 1.0000, z = -0.49  
+G_ab  REML mean 0.5208 (s.e. 0.0114), true 0.5000, z = +1.82  
+G_bb  REML mean 1.0171 (s.e. 0.0222), true 1.0000, z = +0.77  
+R_aa  REML mean 2.3312 (s.e. 0.0095), true 2.3333, z = -0.22  
+R_ab  REML mean 0.6048 (s.e. 0.0111), true 0.6110, z = -0.56  
+R_bb  REML mean 3.9837 (s.e. 0.0208), true 4.0000, z = -0.78  
+r_g   mean 0.5304 (s.e. 0.0110), true 0.5000
+gate passed

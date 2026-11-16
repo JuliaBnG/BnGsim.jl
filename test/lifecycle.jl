@@ -84,10 +84,10 @@ using RelationshipMatrices: ainv
     n, rec = length(pf), recorded(pf)
     Z = Matrix(incidence(rec, n))
     X = ones(length(rec), 1)
-    λ = pf.σe^2
+    λ = pf.R0[1, 1]
     C = [X'X X'Z; Z'X Z'Z+λ*inv(nrm(pf.sire, pf.dam))]
-    y = pf.phenotype[rec]
-    @test pf.ebv ≈ (C\[X'y; Z'y])[2:end] rtol = 1e-8
+    y = pf.phenotype[rec, 1]
+    @test vec(pf.ebv) ≈ (C\[X'y; Z'y])[2:end] rtol = 1e-8
     @test_throws ArgumentError evaluate!(pf, Scheme(; noff = 200, nsire = 10, ndam = 50, evaluation = :phenotype))
 
     # ---- records available from an age ------------------------------------
@@ -110,13 +110,13 @@ using RelationshipMatrices: ainv
     # the estimates used at the last step are those of an independent REML
     pr2 = founder_population(hap, qtl, t, key)
     simulate!(pr2, sr, mm, 2)
-    vc2 = copy(pr2.vc)
+    vc2 = [pr2.G0[1, 1], pr2.R0[1, 1]]
     rec = recorded(pr2)
-    rr = reml(pr2.phenotype[rec], ones(length(rec), 1),
+    rr = reml(pr2.phenotype[rec, 1], ones(length(rec), 1),
         [RandomEffect(incidence(rec, length(pr2)), ainv(pr2.sire, pr2.dam), vc2[1])]; σ²e = vc2[2], tol = 1e-6)
     evaluate!(pr2, sr)
-    @test pr2.vc ≈ [rr.G0[1][1, 1], rr.σ²e] rtol = 1e-5
-    @test dr.va[3] == pr2.vc[1]
+    @test [pr2.G0[1, 1], pr2.R0[1, 1]] ≈ [rr.G0[1][1, 1], rr.σ²e] rtol = 1e-5
+    @test dr.va[3] == pr2.G0[1, 1]
 
     # ---- checkpoints ----------------------------------------------------------
     sc = Scheme(; noff = 200, nsire = 10, ndam = 40, evaluation = :pblup, max_sire_age = 1, reml = true)
@@ -128,7 +128,7 @@ using RelationshipMatrices: ainv
     back = load_checkpoint(path)
     d2 = simulate!(back, sc, mm, 2)
     for f in fieldnames(Population)
-        f in (:blocks, :qtl, :trait, :key) && continue
+        f in (:blocks, :qtl, :traits, :key) && continue
         @test isequal(getfield(back, f), getfield(full, f))
     end
     @test all(packed(back.blocks[k]) == packed(full.blocks[k]) for k in eachindex(full.blocks))
