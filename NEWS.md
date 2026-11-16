@@ -1,5 +1,53 @@
 # BnGsim.jl release notes
 
+## v0.3.0 (unreleased)
+
+First part of the breeding-loop work (M3): keyed random streams, a
+faster meiosis kernel, and a trait model that keeps effect distributions.
+
+### Breaking
+
+- `eqtl` samples different effects for a given `rng`. Effects are now
+  only multiplied by one factor, so a positive distribution such as
+  `Gamma` stays positive; the base-population mean is set through the
+  intercept of the returned `TraitQTL`. Before, every effect was shifted
+  to centre the genetic values, and the multi-trait method ignored each
+  trait's `da` and imposed `R` on the effects rather than on the genetic
+  values.
+- Multi-trait `eqtl` gives genetic values whose sample correlation matrix
+  is `R` exactly in the base population; it used to match `R` only in
+  expectation over effects.
+
+### New
+
+- `SimKey` and `keyed_rng`: every random stream is addressed by a
+  coordinate (seed, replicate, generation, domain, stage, entity,
+  subcounter), mapped by Philox4x64-10 to the state of a `Xoshiro`.
+  Draws do not depend on thread count, schedule or call order. A golden
+  test fixes the layout; Philox is checked against Random123.jl.
+- `MeiosisMap` and `make_progeny!`: keyed meiosis on packed haplotypes,
+  one offspring per row of a mating plan, with per-chromosome genetic
+  lengths from the species and optional crossover records
+  (`MeiosisRecord`). With 50 000 loci and 10 000 offspring on 8 threads
+  it is about 28 times faster than `gene_drop!`
+  (`bench/results/meiosis-2026-11-16-ryzen3900x.txt`).
+- `trait_summary`: mean, variance, genic variance and correlations of the
+  genetic values of a population.
+- Statistical tests of meiosis against exact theory: Poisson crossover
+  counts per chromosome, Haldane recombination fractions (½ between
+  chromosomes), unbiased segregation, and the variance of a gamete's
+  genetic value under linkage. Seeds and 4-standard-error tolerances are
+  declared in `test/meiosis.jl`.
+
+### Fixed
+
+- `gene_drop!(::Haplotype, ...)` threw `DimensionMismatch` unless the
+  number of loci was a multiple of 64.
+
+### Deprecated
+
+- `norm_mv!` (no longer used by `eqtl`).
+
 ## v0.2.0 (2026-11-15)
 
 Released as 0.2.0 rather than 0.1.2 because it breaks code written for

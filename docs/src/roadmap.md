@@ -60,23 +60,24 @@ a dependency, and BnGsim does not aim for API compatibility with them.
 Sequence-level forward simulation belongs in FisherWright (or SLiM), not
 here.
 
-## 2. Current status (v0.2.0)
+## 2. Current status (v0.3.0, in progress)
 
 | Area | State |
 | :--- | :--- |
 | Founders | `historical_population`/`HistoricalSpec` wrap `fisher_wright`. `continue_population` extends a run. `founder_haplotypes` samples founders from a `FisherWrightResult`, a packed BNGH1 file, or xyBnG `BitMatrix` output. `sample_founder_population` returns a `FounderPopulation` built on `VariantMap` and `LocusSet`. |
 | Founder diagnostics | `founder_summary` (SFS, LD decay, chip/QTL MAF, VanRaden `G` statistics, implied `Mₑ`), `ld_decay`, `vanraden_g`. |
-| Meiosis | `crossovers` (Poisson, no interference, independent assortment), `gamete!` and `gene_drop!` on packed BnGStructs haplotypes. `random_mate`, `rnd_ped`, `expand`. |
+| Keyed streams | `SimKey`, `keyed_rng` (Philox4x64-10 → Xoshiro), golden test (§4.2). |
+| Meiosis | `MeiosisMap`, `make_progeny!` (keyed, word-wise, per-chromosome genetic lengths, `MeiosisRecord`); tested against exact theory. The older `crossovers`, `gamete!`, `gene_drop!` with an explicit `rng`. `random_mate`, `rnd_ped`, `expand`. |
 | Sampling | `sample_id`, `sample_loci` (MAF-filtered chip and QTL `LocusSet`s). |
-| Traits | `eqtl` (single trait, and multi-trait with genetic correlation matrix), `norm_mv!`, `tbv!`, `phenotype!` (correlated residuals, sex-limited expression, threshold traits from a liability scale), `dummy_traits`. |
+| Traits | `eqtl` (effects scaled only, mean in the intercept, each trait's `da` honoured, realised covariance exact in the base population), `trait_summary`, `tbv!`, `phenotype!` (correlated residuals, sex-limited expression, threshold traits from a liability scale), `dummy_traits`. |
 | Provenance | `provenance` (Breeding is listed when loaded) writes a text header with the date, host, CPU, threads, seed and package versions/commits. This partly covers I2: there is no JSON manifest yet. |
-| Not started | Scenario schema, `SimKey`, `IndividualStore`/`PedigreeView`, selection and evaluation loop, lifecycle, checkpoints, CLI, adapter layer. |
+| Not started | Scenario schema, `IndividualStore`/`PedigreeView`, selection and evaluation loop, lifecycle, checkpoints, CLI, adapter layer. |
 
-All randomness takes an explicit `rng`. FisherWright (0.4 and later) and
-`gene_drop!` seed one stream per haplotype from `rng`, so founders and
-gene drop do not depend on the thread count. What is still missing for
-invariant I1 is keying by simulation coordinate (§4.2): today a draw
-depends on the order of the calls that precede it.
+Meiosis through `make_progeny!` is keyed by coordinate (§4.2): a draw
+depends on its `SimKey` only, not on thread count or call order. The
+other stochastic functions still take an explicit `rng`, so their draws
+depend on the order of the calls that precede them; they are moved to
+`SimKey` as the breeding loop takes them over.
 
 ## 3. Design invariants
 

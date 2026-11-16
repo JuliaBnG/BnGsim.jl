@@ -1,15 +1,22 @@
 # BnGsim.jl
 
 BnGsim.jl simulates breeding programs in the JuliaBnG ecosystem. Version
-0.1 provides the building blocks:
+0.3 provides the building blocks:
 
 - **Founders:** Wright–Fisher burn-in through FisherWright.jl
   (`historical_population`, `continue_population`), founder sampling
   (`founder_haplotypes`, `sample_founder_population`), and readers and
   writers for packed haplotype files.
-- **Meiosis:** Poisson crossovers without interference, `gamete!` and
-  `gene_drop!` on packed BnGStructs `Haplotype`s, `random_mate`, `rnd_ped`.
-- **Traits:** QTL sampling (`sample_loci`, `eqtl`), true breeding values
+- **Keyed streams:** `SimKey` addresses every random stream by its
+  coordinate in the simulation, so results do not depend on thread count
+  or call order (`keyed_rng`).
+- **Meiosis:** `MeiosisMap` and `make_progeny!` (keyed, word-wise, with
+  per-chromosome genetic lengths and optional crossover records); the
+  older `gamete!`/`gene_drop!` with an explicit `rng`; `random_mate`,
+  `rnd_ped`.
+- **Traits:** QTL sampling (`sample_loci`, `eqtl`, which keeps the shape of
+  the effect distribution and sets the mean through the intercept),
+  `trait_summary`, true breeding values
   (`tbv!`), and phenotypes with correlated residuals, sex-limited expression
   and threshold traits (`phenotype!`).
 - **Diagnostics and provenance:** `founder_summary`, `ld_decay`,

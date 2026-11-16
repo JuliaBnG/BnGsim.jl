@@ -10,7 +10,7 @@
 """
     Domain
 
-Codes of the `domain` field of a [`SimKey`](@ref): which part of a
+Codes of the `domain` field of a [`SimKey`](@ref BnGsim.SimKey): which part of a
 simulation a stream belongs to. The values are part of the stream layout
 and never change; new domains get new codes.
 """

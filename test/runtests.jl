@@ -158,11 +158,37 @@ end
 
         qtl1 = eqtl(hap0, panels[2], t1; rng = MersenneTwister(107))
         @test qtl1 isa TraitQTL
-        @test std(tbv(hap0, qtl1)) ≈ 2.0 atol = 1e-4
+        @test std(tbv(hap0, qtl1)) ≈ 2.0 atol = 1e-10
+        @test abs(mean(tbv(hap0, qtl1))) < 1e-10
+        # effects are only scaled: a positive distribution stays positive and
+        # the ratios of the draws are kept
+        tg = Trait("pos"; σₐ = 1.5, da = Gamma(0.4, 1.0))
+        qg = eqtl(hap0, panels[2], tg; rng = MersenneTwister(111))
+        draws = rand(MersenneTwister(111), Gamma(0.4, 1.0), length(panels[2]))
+        @test all(>(0), qg.additive)
+        @test qg.additive ≈ draws .* (qg.additive[1] / draws[1])
+        @test qg.intercept < 0
+        @test std(tbv(hap0, qg)) ≈ 1.5 atol = 1e-10
+        s1 = trait_summary(hap0, qg)
+        @test s1.var[1] ≈ 1.5^2 atol = 1e-8
+        @test abs(s1.mean[1]) < 1e-10
+        @test s1.genic[1] > 0 && size(s1.cor) == (1, 1)
+        @test_throws ArgumentError eqtl(Haplotype(BitMatrix(falses(nlc, 2nid))), panels[2], t1)
 
         R_g = [1.0 0.4 0.1; 0.4 1.0 -0.2; 0.1 -0.2 1.0]
         mqtl = eqtl(hap0, panels[2], R_g, [t1, t2, t_cat]; rng = MersenneTwister(108))
         @test mqtl isa MultiTraitQTL
+        sm = trait_summary(hap0, mqtl)
+        @test sm.cor ≈ R_g atol = 1e-8                     # realised, not only targeted
+        @test sqrt.(sm.var) ≈ [2.0, 3.0, 1.0] atol = 1e-8
+        @test maximum(abs, sm.mean) < 1e-8
+        # trait 1 is only rescaled, so its distribution keeps its shape
+        tgp = Trait("pos"; σₐ = 1.0, da = Exponential(1.0))
+        mq2 = eqtl(hap0, panels[2], [1.0 0.5; 0.5 1.0], [tgp, t2]; rng = MersenneTwister(112))
+        @test all(>(0), mq2.additive[:, 1])
+        @test trait_summary(hap0, mq2).cor[1, 2] ≈ 0.5 atol = 1e-8
+        @test_throws ArgumentError eqtl(hap0, panels[2], [1.0 2.0; 2.0 1.0], [t1, t2])
+        @test_throws ArgumentError eqtl(hap0, panels[2].loci[1:1], [1.0 0.5; 0.5 1.0], [t1, t2])
         ped_t = DataFrame(
             id = 1:nid,
             sire = zeros(Int32, nid),

@@ -17,7 +17,7 @@
 
 The genome layout used by [`make_progeny!`](@ref), built once: for every
 chromosome its physical start and end (genome-wide bp), its genetic length
-in Morgans (from [`BnGStructs.map_length`](@ref)), and the range of loci of
+in Morgans (from `BnGStructs.map_length`), and the range of loci of
 `map` on it. The map is checked against the species with
 `BnGStructs.check_coordinates`.
 """
