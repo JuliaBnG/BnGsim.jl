@@ -7,7 +7,7 @@ using Mmap
 using Serialization
 using FisherWright
 using RelationshipMatrices
-using Breeding: Breeding, MME, mme, RandomEffect, solve_mme, incidence, TM1997, rocs, pev_candidates
+using Breeding: Breeding, MME, mme, RandomEffect, solve_mme, incidence, TM1997, rocs, pev_candidates, reml
 using DataFrames
 using Distributions
 using Random
@@ -32,7 +32,8 @@ export provenance
 export SimKey, Domain, keyed_rng, philox4x64, keyed_int, keyed_shuffle!
 export MeiosisMap, MeiosisRecord, make_progeny!, ncrossovers
 export Population, founder_population, Scheme, evaluate!, select_parents, mating_plan, step!, simulate!
-export generation_summary, ngenerations, generation_ids
+export generation_summary, ngenerations, generation_ids, current_step, recorded
+export save_checkpoint, load_checkpoint
 export HistoricalSpec, historical_population, continue_population, founder_haplotypes
 export read_packed_haplotypes, write_xy
 export ld_decay, vanraden_g, founder_summary
