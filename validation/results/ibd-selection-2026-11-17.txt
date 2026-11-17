@@ -1,0 +1,3 @@
+# validation/ibd-selection.jl on the local PC (Ryzen 9 3900X), 2026-11-17, BnGsim 0.9.1, RelationshipMatrices 0.7.2, 4 threads, 20 replicates per rule
+truncation mean(I − A) off-diagonal 0.0331 (s.e. 0.0075, sd over replicates 0.0336); mean(Fseg − F) 0.0153 (s.e. 0.0041)
+random     mean(I − A) off-diagonal -0.0044 (s.e. 0.0036, sd over replicates 0.0159); mean(Fseg − F) 0.0013 (s.e. 0.0029)

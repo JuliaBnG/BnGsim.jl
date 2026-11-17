@@ -1,5 +1,20 @@
 # BnGsim.jl release notes
 
+## Unreleased
+
+### Documentation
+
+- New page "Relationships: A, G and IBD": A, realized IBD from founder
+  segments (exact and at the markers), G, and four measures of
+  inbreeding (pedigree, segments, ROH, G) on one simulated population,
+  computed during the docs build.
+- `validation/ibd-selection.jl`: realized IBD against the pedigree
+  expectation over 20 replicates. Without selection mean(I_seg − A) is
+  −0.004 (s.e. 0.004); under truncation on PBLUP EBV it is +0.033 (s.e.
+  0.008), and F_seg − F is +0.015 (s.e. 0.004): selected relatives share
+  the segments around favourable QTL alleles more often than Mendelian
+  sampling implies.
+
 ## v0.9.1 (2026-11-17)
 
 ### New
