@@ -1,6 +1,17 @@
 # BnGsim.jl release notes
 
-## Unreleased
+## v0.10.0 (2026-11-17)
+
+BnGStructs 0.4 (M1, second tranche): a species carries no population
+size.
+
+### Breaking
+
+- `HistoricalSpec(name, sp, ne, nt, mr)`: the population size is an
+  argument; it used to come from `sp.nid`.
+- `sample_founder_population(species; ne, ...)`: `ne`, the size of the
+  Fisher–Wright burn-in, is a required keyword.
+- Requires BnGStructs 0.4 and FisherWright 0.8.1.
 
 ### Documentation
 

@@ -16,7 +16,7 @@ Statistics = "10745b16-79ce-11e8-11f9-7d13ad32a3b2"
 BnGsim = {path = ".."}
 
 [compat]
-BnGStructs = "0.3"
+BnGStructs = "0.4"
 DataFrames = "1"
 Documenter = "1"
 LinearAlgebra = "1"

@@ -52,6 +52,7 @@ _to_variant_map(df::DataFrame) = VariantMap(
 """
     sample_founder_population(
         species::Species;
+        ne::Integer,
         n_id::Int = 100,
         n_marker::Int = 1000,
         n_qtl::Int = 100,
@@ -65,10 +66,13 @@ _to_variant_map(df::DataFrame) = VariantMap(
     ) -> FounderPopulation
 
 Simulate a base founder population with `n_marker` markers, `n_qtl` QTLs, and heritability `h2`
-by running a Fisher-Wright burn-in of `burnin_generations` using the specified `species` parameters.
+by running a Fisher-Wright burn-in of `burnin_generations` generations of `ne` diploid individuals
+on the genome of `species` (a species carries no population size since BnGStructs 0.4, so
+`ne` is required).
 """
 function sample_founder_population(
     species::Species;
+    ne::Integer,
     n_id::Int = 100,
     n_marker::Int = 1000,
     n_qtl::Int = 100,
@@ -85,6 +89,7 @@ function sample_founder_population(
 
     res = fisher_wright(
         species,
+        Int(ne),
         burnin_generations,
         mutation_rate;
         verbose = verbose,

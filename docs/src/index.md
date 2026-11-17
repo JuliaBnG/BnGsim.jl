@@ -66,7 +66,7 @@ Pkg.add("BnGsim")
 using BnGStructs, BnGsim, Random
 
 rng = Xoshiro(2026)
-fp  = sample_founder_population(Cattle(100); n_id = 20, n_marker = 500, n_qtl = 50,
+fp  = sample_founder_population(Cattle(); ne = 100, n_id = 20, n_marker = 500, n_qtl = 50,
                                 h2 = 0.3, burnin_generations = 200, rng = rng)
 fp.tbv           # true breeding values of the founders
 fp.markers.loci  # marker chip loci in fp.map
