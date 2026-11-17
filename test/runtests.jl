@@ -33,11 +33,13 @@ end
 
 @testset "BnGsim Founder Population Tests" begin
     # Fast test with small species
-    sp = Cattle(50) # small Ne for fast test
+    sp = Cattle()
+    ne = 50 # small Ne for fast test
     
     @testset "Sample from fresh Fisher-Wright simulation" begin
         founder = sample_founder_population(
             sp;
+            ne = ne,
             n_id = 10,
             n_marker = 50,
             n_qtl = 10,
@@ -96,7 +98,7 @@ end
 
     @testset "BnGStructs-native reproduction, QTL, TBV, and phenotypes" begin
         rng = MersenneTwister(99)
-        sp_toy = GenericSpecies("toy", 20, [1_000_000, 1_000_000])
+        sp_toy = GenericSpecies("toy", [1_000_000, 1_000_000])
         nlc, nid = 128, 20
         gt = BitMatrix(rand(rng, Bool, nlc, 2nid))
         # Ensure all loci are polymorphic
@@ -115,7 +117,7 @@ end
         lms_sp = sum_map(sp_toy)
         # default map: identical to the uniform one; per-chromosome lengths are honoured
         @test lms_sp == sum_map(sp_toy.chromosome; M = sp_toy.M)
-        sp_len = GenericSpecies("toy", 20, [1_000_000, 1_000_000]; morgan = [0.5, 2.0])
+        sp_len = GenericSpecies("toy", [1_000_000, 1_000_000]; morgan = [0.5, 2.0])
         @test sum_map(sp_len).len == [0.5, 2.0]
         # Crossover counts per chromosome are Poisson with the stated lengths:
         # 400 meioses, means 0.5 and 2.0, tolerance 4 standard errors.
@@ -229,8 +231,8 @@ end
 
 @testset "Founder design: historical populations and summaries" begin
     using FisherWright, Statistics
-    sp = GenericSpecies("toy", 100, [5_000_000, 5_000_000])
-    spec = HistoricalSpec("toy", sp, 300, 5.0)
+    sp = GenericSpecies("toy", [5_000_000, 5_000_000])
+    spec = HistoricalSpec("toy", sp, 100, 300, 5.0)
     res = historical_population(spec; seed = 1)
     @test res isa FisherWrightResult
     @test length(res.active_haplotypes) == 200

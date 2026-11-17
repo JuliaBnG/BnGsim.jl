@@ -27,8 +27,15 @@ struct HistoricalSpec
     M::Float64
 end
 
-HistoricalSpec(name::AbstractString, sp::Species, nt::Integer, mr::Real) =
-    HistoricalSpec(String(name), Int(sp.nid), Int(nt), Float64(mr), copy(sp.chromosome), Float64(sp.M))
+"""
+    HistoricalSpec(name, sp::Species, ne, nt, mr)
+
+The run of `ne` diploid individuals for `nt` generations on the genome of
+`sp` (its chromosome lengths and bp per Morgan). The size is an argument:
+a species carries none since BnGStructs 0.4.
+"""
+HistoricalSpec(name::AbstractString, sp::Species, ne::Integer, nt::Integer, mr::Real) =
+    HistoricalSpec(String(name), Int(ne), Int(nt), Float64(mr), copy(sp.chromosome), Float64(sp.M))
 
 """
     historical_population(spec::HistoricalSpec; seed = nothing, rng = Xoshiro(seed),
