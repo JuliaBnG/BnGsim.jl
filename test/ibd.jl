@@ -51,6 +51,16 @@ using RelationshipMatrices: RelationshipMatrices, nrm
     # RelationshipMatrices and in validation/ibd.jl)
     @test abs(mean(R .- A)) < 0.01
     @test diag(R) .- 1 ≈ segment_inbreeding(segs)
+    # the summaries report the cohort's realized inbreeding; over the
+    # cohorts of one run it follows the pedigree F
+    p3 = founder_population(hap, qtl, t, key)
+    d3 = simulate!(p3, Scheme(; noff = 60, nsire = 3, ndam = 10, evaluation = :tbv, selection = :random,
+        record_meiosis = true), mm, 6)
+    @test hasproperty(d3, :Fseg) && d3.Fseg[1] == 0
+    @test d3.Fseg[end] ≈ mean(segment_inbreeding(founder_segments(p3, mm); ids = generation_ids(p3, 6)))
+    @test cor(d3.Fseg, d3.F) > 0.9 && d3.Fseg[end] > 0
+    @test !hasproperty(simulate!(founder_population(hap, qtl, t, key),
+        Scheme(; noff = 60, nsire = 3, ndam = 10, evaluation = :tbv), mm, 1), :Fseg)
     # unrecorded cohorts: the segments are unknown
     p2 = founder_population(hap, qtl, t, key)
     simulate!(p2, Scheme(; noff = 60, nsire = 6, ndam = 15, evaluation = :tbv, selection = :random), mm, 1)

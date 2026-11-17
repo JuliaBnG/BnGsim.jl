@@ -680,7 +680,8 @@ function step!(pop::Population, sc::Scheme, mm::MeiosisMap)
     push!(pop.first, n0 + 1)
     _sexes!(pop, ids, g + 1)
     _phenotypes!(pop, ids, g + 1)
-    return merge(generation_summary(pop, g; weights = w), acc,
+    segs = sc.record_meiosis ? founder_segments(pop, mm) : nothing
+    return merge(generation_summary(pop, g; weights = w, segs = segs), acc,
         (nsire = length(s), ndam = length(d), L = L), _vc(pop), info)
 end
 
@@ -740,7 +741,7 @@ function _aggregate_qtl(pop::Population, w)
 end
 
 """
-    generation_summary(pop::Population, g; weights = ones(k)) -> NamedTuple
+    generation_summary(pop::Population, g; weights = ones(k), segs = nothing) -> NamedTuple
 
 For cohort `g`: its size; mean, variance and genic variance
 ``\\sum 2p(1-p)a^2`` at the QTL of the genetic values (one trait), or of
@@ -749,8 +750,13 @@ traits, then also `mean_<name>`, `var_<name>` per trait and the genetic
 correlation `rg_<a>_<b>` of each pair within the cohort); mean pedigree
 inbreeding `F` and mean pedigree `coancestry` ``\\bar\\theta_g`` over all
 pairs of the cohort, self-coancestry ``(1 + F_i)/2`` included (founders
-unrelated and non-inbred); the loss of heterozygosity `Fhet`; and the
-number of animals `alive` at step `g` (all cohorts).
+unrelated and non-inbred); the loss of heterozygosity `Fhet`; the
+number of animals `alive` at step `g` (all cohorts); and, given the
+founder segments `segs` (`founder_segments(pop, mm)`, which `step!`
+passes when the scheme records meioses), the mean realized inbreeding
+`Fseg` of the cohort, the proportion of the genome at which an animal's
+two haplotypes descend from the same founder haplotype (its expectation
+is the pedigree `F`).
 
 `Fhet` is ``1 - (1 - \\bar\\theta_0)\\,\\bar H_g/\\bar H_0`` over all loci, with
 ``\\bar H`` the mean of ``2p(1-p)`` from the cohort's own allele
@@ -763,7 +769,7 @@ is the mean coancestry ``\\bar\\theta_g``. Under selection,
 linked to QTL; both carry drift noise that is large when few chromosome
 segments segregate.
 """
-function generation_summary(pop::Population, g::Integer; weights = ones(ntraits(pop)))
+function generation_summary(pop::Population, g::Integer; weights = ones(ntraits(pop)), segs = nothing)
     ids = generation_ids(pop, g)
     hap = pop.blocks[g+1]
     F = nrm_diag(pop.sire, pop.dam)[ids] .- 1
@@ -784,7 +790,8 @@ function generation_summary(pop::Population, g::Integer; weights = ones(ntraits(
         out = merge(out, per, rg)
     end
     merge(out, (F = mean(F), coancestry = θ, Fhet = 1 - (1 - θ0(pop)) * H(hap) / H(pop.blocks[1]),
-        alive = count(i -> pop.generation[i] <= g < pop.exit[i], 1:length(pop))))
+        alive = count(i -> pop.generation[i] <= g < pop.exit[i], 1:length(pop))),
+        segs === nothing ? NamedTuple() : (Fseg = mean(segment_inbreeding(segs; ids = ids)),))
 end
 
 """
@@ -802,7 +809,8 @@ function simulate!(pop::Population, sc::Scheme, mm::MeiosisMap, nstep::Integer; 
         checkpoint === nothing || save_checkpoint(checkpoint, pop)
         r
     end
-    last = merge(generation_summary(pop, current_step(pop); weights = index_weights(pop, sc)),
+    segs = sc.record_meiosis ? founder_segments(pop, mm) : nothing
+    last = merge(generation_summary(pop, current_step(pop); weights = index_weights(pop, sc), segs = segs),
         _no_accuracy(pop), (nsire = 0, ndam = 0, L = NaN), _vc(pop), _no_ocs(sc))
     return DataFrame([rows; last])
 end
