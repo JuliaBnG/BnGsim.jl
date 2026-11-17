@@ -1,5 +1,14 @@
 # BnGsim.jl release notes
 
+## v0.9.1 (2026-11-17)
+
+### New
+
+- With `Scheme(; record_meiosis = true)` the per-generation summaries
+  have a column `Fseg`: the cohort's mean realized inbreeding from
+  founder segments, next to the pedigree `F` and `Fhet`.
+  `generation_summary(pop, g; segs)` takes the segments.
+
 ## v0.9.0 (2026-11-16)
 
 Realized IBD (M5, BnGsim side): founder segments from the loop's
