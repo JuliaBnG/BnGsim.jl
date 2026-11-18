@@ -102,6 +102,18 @@
         c[findfirst(==(i), cand)] = x / 400
     end
     @test c' * A * c <= K + 0.01                  # after rounding to whole offspring
+    # the bound, the kinship reached and the flag, on the kinship scale
+    info = select_parents(po, ocs, nothing)[5]
+    ref = TM1997(po.ebv[cand], Int.(po.male[cand]), A, K)
+    @test info.ocs_bound == K / 2 && info.ocs_feasible && isnan(info.ocs_L)
+    @test info.ocs_kinship ≈ dot(ref, A * ref) / 2 && info.ocs_kinship <= K / 2 + 1e-8
+    # an unattainable bound: minimum-coancestry contributions, flagged, no warning
+    low = Scheme(; noff = 200, nsire = 10, ndam = 50, evaluation = :tbv, selection = :ocs, K = 0.01)
+    info0 = (@test_logs select_parents(po, low, nothing))[5]
+    @test !info0.ocs_feasible && info0.ocs_kinship > 0.005
+    # the run reports the four columns for :fixed too, NaN in the last row
+    _, dfo = run(ocs, 2)
+    @test all(dfo.ocs_feasible) && all(dfo.ocs_bound[1:end-1] .== K / 2) && isnan(dfo.ocs_kinship[end])
     # rocs with λ = κ = 0 and a cap of one truncation share is truncation
     tr = select_parents(po, Scheme(; noff = 200, nsire = 10, ndam = 10, evaluation = :tbv), nothing)
     ro = select_parents(po, Scheme(; noff = 200, nsire = 10, ndam = 10, evaluation = :tbv,

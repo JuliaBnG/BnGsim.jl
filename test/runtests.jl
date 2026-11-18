@@ -8,6 +8,7 @@ using Random
 using Statistics
 using StatsBase: sample
 using LinearAlgebra
+using Breeding: TM1997
 using RelationshipMatrices: nrm
 
 # First draws of the version-independent integer sampler (test/keys.jl)

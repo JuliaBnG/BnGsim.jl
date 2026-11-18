@@ -699,10 +699,13 @@ the current time step (the youngest cohort only, with the default ages
 [`evaluate!`](@ref) (`nothing` for `:tbv` and `:phenotype`); `:rocs` takes
 the prediction error covariance of the candidates' index from it. Every
 ranking breaks ties by ascending id (invariant I1a). `info` is empty
-except for the dynamic OCS constraints, where it holds the bound, the
-constrained kinship reached, the generation interval used and whether
-the bound could be met (`ocs_bound`, `ocs_kinship`, `ocs_L`,
-`ocs_feasible`).
+except for `:ocs`, where it holds the bound, the constrained kinship
+reached, the generation interval used and whether the bound could be met
+(`ocs_bound`, `ocs_kinship`, `ocs_L`, `ocs_feasible`). With `ocs = :fixed`
+the bound is `K/2` and the kinship ``c'Ac/2`` of `Breeding.TM1997`'s
+contributions, on the same kinship scale, and `ocs_L` is `NaN`; when `K`
+cannot be met, TM1997 returns the minimum-coancestry contributions and
+`ocs_feasible` is `false`.
 """
 function select_parents(pop::Population, sc::Scheme, m)
     g = current_step(pop)
@@ -728,7 +731,10 @@ function select_parents(pop::Population, sc::Scheme, m)
     sex = Int.(pop.male[cand])
     info = NamedTuple()
     c = if sc.selection == :ocs && sc.ocs == :fixed
-        2 .* TM1997(u, sex, A, sc.K)
+        r = TM1997(u, sex, A, sc.K)
+        # c'Ac with ½ per sex is twice the mean kinship of the contributions
+        info = (ocs_bound = sc.K / 2, ocs_kinship = r.cAc / 2, ocs_L = NaN, ocs_feasible = feasible(r))
+        2 .* r
     elseif sc.selection == :ocs
         cc, info = _dynamic_ocs(pop, sc, g, cand, u)
         2 .* cc
@@ -859,7 +865,7 @@ function _drop_genomes!(pop::Population, sc::Scheme)
     return pop
 end
 
-_no_ocs(sc::Scheme) = sc.selection == :ocs && sc.ocs != :fixed ?
+_no_ocs(sc::Scheme) = sc.selection == :ocs ?
     (ocs_bound = NaN, ocs_kinship = NaN, ocs_L = NaN, ocs_feasible = true) : NamedTuple()
 
 # Between steps g and g + 1: culling of unselected adults, then deaths.
