@@ -32,7 +32,9 @@ const _STAGE_RANDOM_SELECTION = 0x0003
 
 Animals of a breeding program, one row per animal in order of birth.
 Animal ids are `1:n` and equal the row; nothing is ever removed, so the
-equality holds (invariant I4 holds trivially).
+equality holds (invariant I4 holds trivially). Tables that leave the
+population carry the id explicitly ([`pedigree`](@ref)), and relationship
+matrices on a subset are indexed through a [`PedigreeView`](@ref).
 
 Fields:
 
@@ -156,6 +158,48 @@ _has_dominance(q::TraitQTL) = any(!iszero, q.dominance)
 
 # the current time step: the cohort of the youngest animals
 current_step(pop::Population) = ngenerations(pop) - 1
+
+"""
+    pedigree(pop::Population[, ids]) -> DataFrame
+
+The animals `ids` of `pop` (default: all), one row each, with the id
+explicit, so that a subset, a reordering or a concatenation of tables
+keeps the identity of every animal:
+
+- `id`, `sire`, `dam` (`0` = unknown; parents are ids, and may be absent
+  from a subset), `male`, `generation` (the birth cohort), `exit` (the
+  first time step at which the animal is dead or culled; `missing` while
+  it lives);
+- per trait `<name>`: `tbv_<name>`, the true genetic value;
+  `phenotype_<name>`, the phenotype (`missing` in the sex that does not
+  express the trait; it is drawn at birth, and is available to an
+  evaluation only from the trait's `age` on, see [`observed`](@ref));
+  and `ebv_<name>`, the last evaluation (`missing` before one, and for
+  animals outside an evaluation window, see [`Scheme`](@ref)).
+
+Inside `pop`, ids equal rows; use the `id` column, not the row number,
+once a table leaves it. [`PedigreeView`](@ref) builds the dense rows of
+relationship matrices from these ids.
+"""
+function pedigree(pop::Population, ids = 1:length(pop))
+    ids = collect(Int, ids)
+    all(i -> 1 <= i <= length(pop), ids) || throw(ArgumentError("ids must lie in 1:$(length(pop))"))
+    nan(x) = isnan(x) ? missing : x
+    df = DataFrame(
+        id = ids,
+        sire = Int.(pop.sire[ids]),
+        dam = Int.(pop.dam[ids]),
+        male = pop.male[ids],
+        generation = Int.(pop.generation[ids]),
+        exit = [x == typemax(Int32) ? missing : Int(x) for x in pop.exit[ids]],
+    )
+    for (j, t) in enumerate(pop.traits)
+        df[!, "tbv_" * t.name] = pop.tbv[ids, j]
+        df[!, "phenotype_" * t.name] = nan.(pop.phenotype[ids, j])
+        df[!, "ebv_" * t.name] = nan.(pop.ebv[ids, j])
+    end
+    return df
+end
 
 """
     alive(pop::Population, t = current_step(pop)) -> Vector{Int}

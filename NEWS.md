@@ -1,5 +1,17 @@
 # BnGsim.jl release notes
 
+## v0.11.1 (2026-11-18)
+
+### New
+
+- `pedigree(pop[, ids])`: the animals as a `DataFrame` with the id
+  explicit (`id`, `sire`, `dam`, `male`, `generation`, `exit`, and per
+  trait `tbv_<name>`, `phenotype_<name>`, `ebv_<name>`; `missing` for an
+  animal still alive, a trait not expressed, or no EBV). Inside a
+  `Population` ids equal rows; a table that leaves it keeps the identity
+  of every animal through a subset, a reordering or a concatenation, and
+  `pedigree_view(pop, df.id)` rebuilds the relationships of a subset.
+
 ## v0.11.0 (2026-11-18)
 
 ### New

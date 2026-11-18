@@ -116,3 +116,36 @@ end
         @test all(isfinite, d.accuracy[1:end-1])
     end
 end
+
+@testset "Pedigree table with explicit ids" begin
+    sp = GenericSpecies("toy", [20_000_000, 10_000_000])
+    rng = Xoshiro(9)
+    vm = VariantMap(unique(sort(rand(rng, 1:30_000_000, 500))), sp)
+    nlc = length(vm)
+    hap = Haplotype(BitMatrix(rand(rng, Bool, nlc, 100)))
+    traits = [Trait("milk"; h² = 0.3, sex = 0, age = 1), Trait("growth"; h² = 0.4)]
+    qtl = eqtl(hap, 1:5:nlc, [1.0 0.2; 0.2 1.0], traits; rng = Xoshiro(3))
+    pop = founder_population(hap, qtl, traits, SimKey(5))
+    simulate!(pop, Scheme(; noff = 60, nsire = 3, ndam = 10, evaluation = :pblup, max_dam_age = 1,
+        survival = [0.9], window = 2), MeiosisMap(sp, vm), 3)
+    n = length(pop)
+    df = pedigree(pop)
+    @test names(df) == ["id", "sire", "dam", "male", "generation", "exit",
+        "tbv_milk", "phenotype_milk", "ebv_milk", "tbv_growth", "phenotype_growth", "ebv_growth"]
+    @test df.id == 1:n && df.sire == pop.sire && df.dam == pop.dam && df.male == pop.male
+    @test df.tbv_growth == pop.tbv[:, 2]
+    @test all(ismissing, df.phenotype_milk[df.male]) && !any(ismissing, df.phenotype_milk[.!df.male])
+    @test isequal(df.exit, [x == typemax(Int32) ? missing : x for x in pop.exit])
+    @test any(ismissing, df.exit) && !all(ismissing, df.exit)
+    # outside the last evaluation's window: no EBV
+    v = evaluation_view(pop, Scheme(; noff = 60, nsire = 3, ndam = 10, window = 2, max_dam_age = 1), current_step(pop) - 1)
+    @test all(ismissing, df.ebv_milk[setdiff(1:n, v.ids)])
+    # a reordered subset keeps the ids, and rebuilds the same relationships
+    ids = shuffle(Xoshiro(1), collect(n-59:n))[1:30]
+    sub = pedigree(pop, ids)
+    @test sub.id == ids && sub.tbv_milk == pop.tbv[ids, 1]
+    w = pedigree_view(pop, sub.id)
+    r = id_to_row(w, sub.id)
+    @test nrm(w.sire, w.dam)[r, r] ≈ nrm(pop.sire, pop.dam)[ids, ids]
+    @test_throws ArgumentError pedigree(pop, [n + 1])
+end
