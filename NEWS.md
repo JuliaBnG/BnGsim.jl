@@ -1,5 +1,37 @@
 # BnGsim.jl release notes
 
+## v0.11.0 (2026-11-18)
+
+### New
+
+- `PedigreeView`: a pedigree restricted to a set of ids, with dense rows
+  in topological order and `0` for a parent that is unknown or outside
+  the view, the form RelationshipMatrices expects; `row_to_id` and
+  `id_to_row` translate (an `ArgumentError` for an id not in the view).
+  `pedigree_view(pop, ids; generations)` adds the ancestors of `ids`
+  traced for `generations` generations (default: all, which keeps the
+  relationships among `ids` exact).
+- `Scheme(; window, ancestor_generations)`: `:pblup`, `:gblup` and
+  `:ssgblup` on the records of the last `window` cohorts, on the
+  pedigree of these animals and their ancestors traced for
+  `ancestor_generations` generations. Animals outside the view get no
+  EBV (`NaN`); `window` must exceed the maximum ages. The default
+  `window = 0` is the whole population, as before (seeded runs are
+  unchanged). Discarding earlier records and parents biases BLUP under
+  selection; the window trades accuracy for the size of the equations.
+- `evaluation_view(pop, scheme)`: the view an evaluation uses; the
+  animal effects of the equations `evaluate!` returns are in its rows.
+
+### Tests
+
+- Property tests on random pedigrees: round trips `row_to_id ∘
+  id_to_row` on sparse, unsorted and repeated ids; parents as rows;
+  topological order; relationships among the ids equal to those of the
+  full pedigree when every ancestor is traced.
+- The window's PBLUP against an independent dense solve; a window over
+  every cohort equal to the full evaluation; ROCS, ssGBLUP and REML with
+  overlapping generations on a window.
+
 ## v0.10.0 (2026-11-17)
 
 BnGStructs 0.4 (M1, second tranche): a species carries no population

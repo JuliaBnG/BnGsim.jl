@@ -307,7 +307,21 @@ A selection and mating scheme, applied every time step:
   are not selected as parents at a step are culled. Young candidates
   (age 0) are kept for the next step. Culling depends on the EBV, so the
   animals left are a selected sample; BLUP and REML with all records and
-  the pedigree account for that.
+  the pedigree account for that;
+- `window`: if positive, `:pblup`, `:gblup` and `:ssgblup` use the records
+  of the animals born in the last `window` time steps only (the current
+  cohort and the `window - 1` before it), on the pedigree of these animals
+  and their ancestors traced for `ancestor_generations` generations (a
+  [`PedigreeView`](@ref)); the other animals get no EBV (`NaN`). It must
+  exceed the maximum ages, so that every candidate is evaluated. `0`
+  (default): all records and the whole pedigree. Under selection,
+  discarding the records of earlier cohorts and the parents beyond the
+  traced depth biases BLUP (Henderson 1975), so a window trades accuracy
+  for the size of the equations; REML with `reml = true` is then
+  estimated from the window's records too;
+- `ancestor_generations`: generations of ancestors traced above the
+  animals of the window (default: all; then the relationships among the
+  window's animals are exact, and only records are discarded).
 
 Dead and culled animals are not candidates, and a record taken at an age
 the animal did not reach is missing.
@@ -334,9 +348,11 @@ Base.@kwdef struct Scheme
     ocs::Symbol = :fixed
     ΔF::Float64 = NaN
     record_meiosis::Bool = false
+    window::Int = 0
+    ancestor_generations::Int = typemax(Int)
     function Scheme(noff, nsire, ndam, evaluation, selection, K, λ, κ, ub, chip, blend,
         max_sire_age, max_dam_age, reml, weights, survival, cull_unselected, genotyped_cohorts, ocs, ΔF,
-        record_meiosis)
+        record_meiosis, window, ancestor_generations)
         noff > 1 && nsire > 0 && ndam > 0 || throw(ArgumentError("noff > 1, nsire > 0 and ndam > 0 are required"))
         max_sire_age >= 0 && max_dam_age >= 0 || throw(ArgumentError("maximum ages must be non-negative"))
         reml && !(evaluation in (:pblup, :gblup, :ssgblup)) &&
@@ -358,9 +374,14 @@ Base.@kwdef struct Scheme
         0 < ub <= 1 || throw(ArgumentError("ub must lie in (0, 1]"))
         all(isfinite, weights) && (isempty(weights) || any(!iszero, weights)) ||
             throw(ArgumentError("weights must be finite and not all zero"))
+        window >= 0 && ancestor_generations >= 0 ||
+            throw(ArgumentError("window and ancestor_generations must be non-negative"))
+        window == 0 || window > max(max_sire_age, max_dam_age) || throw(ArgumentError(
+            "window = $window leaves candidates of age $(max(max_sire_age, max_dam_age)) unevaluated; " *
+            "it must exceed the maximum ages"))
         new(noff, nsire, ndam, evaluation, selection, K, λ, κ, ub, Int32.(chip), blend,
             max_sire_age, max_dam_age, reml, Float64.(weights), Float64.(survival), cull_unselected,
-            genotyped_cohorts, ocs, ΔF, record_meiosis)
+            genotyped_cohorts, ocs, ΔF, record_meiosis, window, ancestor_generations)
     end
 end
 
@@ -405,16 +426,34 @@ function genotyped(pop::Population, sc::Scheme, t::Integer = current_step(pop))
     filter(i -> t - pop.generation[i] < sc.genotyped_cohorts, 1:length(pop))
 end
 
-function _kinv(pop::Population, sc::Scheme)
-    sc.evaluation == :pblup && return ainv(pop.sire, pop.dam)
-    ids = genotyped(pop, sc)
+pedigree_view(pop::Population, ids; generations::Integer = typemax(Int)) =
+    pedigree_view(pop.sire, pop.dam, ids; generations = generations)
+
+"""
+    evaluation_view(pop::Population, scheme::Scheme, t = current_step(pop)) -> PedigreeView
+
+The pedigree on which `scheme` evaluates at step `t`: every animal when
+`scheme.window` is `0`, otherwise the animals born in the last `window`
+steps and their ancestors traced for `scheme.ancestor_generations`
+generations. The animal effects of the equations returned by
+[`evaluate!`](@ref) are in the rows of this view.
+"""
+function evaluation_view(pop::Population, sc::Scheme, t::Integer = current_step(pop))
+    sc.window == 0 && return PedigreeView(pop.sire, pop.dam, 1:length(pop))
+    ids = filter(i -> t - pop.generation[i] < sc.window, 1:length(pop))
+    return pedigree_view(pop, ids; generations = sc.ancestor_generations)
+end
+
+function _kinv(pop::Population, sc::Scheme, v::PedigreeView)
+    sc.evaluation == :pblup && return ainv(v.sire, v.dam)
+    ids = intersect(genotyped(pop, sc), v.ids)            # both ascending
     H = _haplotypes(pop, ids)
     base = pop.blocks[1]                                  # the founders
     p = zeros(base.nlc)                                   # grm wants one per locus
     p[sc.chip] = vec(sum(dosage(base, sc.chip); dims = 2)) ./ base.nhp
     G = grm(H; p = p, loci = sc.chip)
-    sc.evaluation == :ssgblup && return hinv(pop.sire, pop.dam, G, ids; delta = sc.blend)
-    sc.blend > 0 && (G = (1 - sc.blend) .* G .+ sc.blend .* nrm(pop.sire, pop.dam))
+    sc.evaluation == :ssgblup && return hinv(v.sire, v.dam, G, id_to_row(v, ids); delta = sc.blend)
+    sc.blend > 0 && (G = (1 - sc.blend) .* G .+ sc.blend .* nrm(v.sire, v.dam))
     inv(cholesky(Symmetric(G)))
 end
 
@@ -430,7 +469,10 @@ trait-major with an intercept per recorded trait,
 ``\\operatorname{var}(a) = G_0 \\otimes K`` and ``R_0`` among the records
 of one animal (missing records handled exactly). The covariance
 components are `pop.G0` and `pop.R0`, first re-estimated by REML if
-`scheme.reml`. The equations are returned for prediction error variances.
+`scheme.reml`. The equations are returned for prediction error variances;
+their animal effects are in the rows of [`evaluation_view`](@ref), which
+with `scheme.window > 0` covers the recent cohorts and their ancestors
+only (the EBV of the other animals is `NaN`).
 `:phenotype` needs every trait recorded at birth in both sexes.
 """
 function evaluate!(pop::Population, sc::Scheme)
@@ -444,17 +486,23 @@ function evaluate!(pop::Population, sc::Scheme)
         pop.ebv .= pop.phenotype
         return nothing
     end
-    obs = observed(pop)
-    any(obs) || throw(ArgumentError("no records are available at time step $(current_step(pop))"))
-    Kinv = _kinv(pop, sc)
+    v = evaluation_view(pop, sc)
+    t = current_step(pop)
+    obs = observed(pop)[v.ids, :]
+    # records of the window's animals only, not of the ancestors traced
+    sc.window > 0 && (obs[[t - pop.generation[i] >= sc.window for i in v.ids], :] .= false)
+    any(obs) || throw(ArgumentError("no records are available at time step $t"))
+    P = pop.phenotype[v.ids, :]
+    n = length(v)
+    Kinv = _kinv(pop, sc, v)
     # Genetic and residual components are not separable from records of
     # unrelated animals only (the founders at step 0): REML waits for every
     # trait to be recorded on an animal with a known parent.
-    known = (pop.sire .> 0) .| (pop.dam .> 0)
+    known = (v.sire .> 0) .| (v.dam .> 0)
     do_reml = sc.reml && all(j -> any(view(obs, :, j) .& known), 1:k)
     if k == 1
         rec = findall(view(obs, :, 1))
-        y = pop.phenotype[rec, 1]
+        y = P[rec, 1]
         X = ones(length(rec), 1)
         effects = [RandomEffect(incidence(rec, n), Kinv, pop.G0[1, 1])]
         if do_reml
@@ -466,7 +514,7 @@ function evaluate!(pop::Population, sc::Scheme)
         end
         m = mme(y, X, effects; σ²e = pop.R0[1, 1])
     else
-        y, X, Zs = _mt_design(pop, obs)
+        y, X, Zs = _mt_design(P, obs)
         if do_reml
             for j = 1:k, l = 1:j-1
                 any(view(obs, :, j) .& view(obs, :, l)) || throw(ArgumentError(
@@ -486,7 +534,8 @@ function evaluate!(pop::Population, sc::Scheme)
     end
     x = solve_mme(m)
     a = first(m.blocks[2])
-    pop.ebv .= reshape(x[a:a+k*n-1], n, k)
+    pop.ebv .= NaN
+    pop.ebv[v.ids, :] = reshape(x[a:a+k*n-1], n, k)
     return m
 end
 
@@ -499,10 +548,10 @@ end
 # Every trait keeps its genetic component, so a trait without records yet
 # (e.g. recorded late in life) is predicted through G0; only the
 # intercepts of traits with records enter X.
-function _mt_design(pop::Population, obs)
+function _mt_design(P, obs)
     n, k = size(obs)
     ot = findall(j -> any(view(obs, :, j)), 1:k)
-    y, _ = mt_stack(ifelse.(obs, pop.phenotype, NaN))
+    y, _ = mt_stack(ifelse.(obs, P, NaN))
     X = reduce(hcat, mt_blocks(obs, [ones(n, 1) for _ = 1:k])[ot])
     Zs = mt_blocks(obs, [incidence(1:n, n) for _ = 1:k])
     return y, X, Zs
@@ -602,7 +651,12 @@ function select_parents(pop::Population, sc::Scheme, m)
         cc, info = _dynamic_ocs(pop, sc, g, cand, u)
         2 .* cc
     else
-        Ω = m === nothing ? zeros(length(cand), length(cand)) : _pev_index(m, cand, w, length(pop))
+        Ω = if m === nothing
+            zeros(length(cand), length(cand))
+        else
+            v = evaluation_view(pop, sc)
+            _pev_index(m, id_to_row(v, cand), w, length(v))
+        end
         2 .* rocs(u, A; Ω = Ω, sex = sex, λ = sc.λ, κ = sc.κ, ub = sc.ub).w
     end
     ms = findall(k -> pop.male[cand[k]] && c[k] > 1e-9, eachindex(cand))

@@ -18,6 +18,7 @@ using StatsBase: sample
 include("keys.jl")
 include("reproduction.jl")
 include("meiosis.jl")
+include("pedigree-view.jl")
 include("loop.jl")
 include("ocs.jl")
 include("traits.jl")
@@ -37,6 +38,7 @@ export Population, founder_population, Scheme, evaluate!, select_parents, mating
 export generation_summary, ngenerations, generation_ids, current_step, recorded, observed, ntraits, index_weights,
     alive, genotyped, ocs_contributions,
     meioses, founder_segments, segment_inbreeding, irm
+export PedigreeView, pedigree_view, row_to_id, id_to_row, evaluation_view
 export save_checkpoint, load_checkpoint
 export HistoricalSpec, historical_population, continue_population, founder_haplotypes
 export read_packed_haplotypes, write_xy
