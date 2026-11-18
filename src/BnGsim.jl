@@ -7,7 +7,7 @@ using Mmap
 using Serialization
 using FisherWright
 using RelationshipMatrices
-using Breeding: Breeding, MME, mme, RandomEffect, solve_mme, incidence, TM1997, rocs, pev_candidates, reml,
+using Breeding: Breeding, MME, mme, RandomEffect, solve_mme, incidence, TM1997, feasible, rocs, pev_candidates, reml,
     MultiTrait, mt_stack, mt_blocks, mt_rinv
 using DataFrames
 using Distributions

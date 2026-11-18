@@ -1,5 +1,17 @@
 # BnGsim.jl release notes
 
+## v0.12.1 (2026-11-18)
+
+- Requires Breeding 0.4, whose `TM1997` returns its contributions with a
+  `feasible` flag and the coancestry reached, and no longer returns
+  negative contributions when `K` cannot be met.
+- `selection = :ocs` with `ocs = :fixed` reports the same columns as the
+  dynamic constraints: `ocs_bound` (`K/2`), `ocs_kinship` (``c'Ac/2`` of
+  the contributions, the same kinship scale), `ocs_L` (`NaN`) and
+  `ocs_feasible`. When `K` cannot be met, the minimum-coancestry
+  contributions are used and `ocs_feasible` is `false`, without a
+  warning.
+
 ## v0.12.0 (2026-11-18)
 
 ### New
