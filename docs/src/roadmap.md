@@ -72,7 +72,7 @@ here.
 | Traits | `eqtl` (effects scaled only, mean in the intercept, each trait's `da` honoured, realised covariance exact in the base population), `trait_summary`, `tbv!`, `phenotype!` (correlated residuals, sex-limited expression, threshold traits from a liability scale), `dummy_traits`. |
 | Provenance | `provenance` (Breeding is listed when loaded) writes a text header with the date, host, CPU, threads, seed and package versions/commits. This partly covers I2: there is no JSON manifest yet. |
 | Breeding loop | `Population` (ids equal rows; nothing is removed), `Scheme`, `step!`/`simulate!`: discrete or overlapping generations (parents up to a maximum age), one or several additive traits with sex- and age-limited records, selection on an index of multi-trait EBVs, optional (multi-trait) REML re-estimation of the covariance components, survival and culling, single-step GBLUP with a genotyped window, OCS with a target ΔF per generation for overlapping generations (newborn-cohort, age-weighted per year, age-weighted per generation), crossover records kept for realized IBD from founder segments (`founder_segments`, RelationshipMatrices 0.7.1), checkpoints that resume a run identically, evaluation through Breeding.jl (`:tbv`, `:phenotype`, `:pblup`, `:gblup`, `:ssgblup`), optionally on a window of recent cohorts and their traced ancestors through a `PedigreeView` (id ↔ row, topological, `0` for parents outside), selection by truncation, `TM1997`, `rocs` or at random, `(criterion, id)` ranking, keyed pairing and meiosis, per-generation summaries. |
-| Not started | Scenario schema, CLI, adapter layer; removal of animals from the store (ids stay rows of the store; `PedigreeView` is the boundary once they do not). |
+| Not started | Scenario schema, CLI, adapter layer; removal of animals' records from the store (ids stay rows of the store; `PedigreeView` is the boundary once they do not). Genomes are dropped once unusable (`retain = :active`, 0.12.0). |
 
 The breeding loop is keyed by coordinate (§4.2): meiosis, sexes,
 phenotypes, random selection and pairing each draw from their own
@@ -164,10 +164,11 @@ and the 1-based topological order with `0` for unknown parents. A property
 test checks the round trip `row_to_id(id_to_row(x)) == x` on pruned, sparse
 and reordered populations.
 
-Haplotypes are stored in generation-sized blocks (`Vector{Haplotype}`).
-Two retention policies are planned: *full*, and *active-only*, which drops
-the genomes of culled, non-breeding animals but keeps their pedigree and
-records.
+Haplotypes are stored in generation-sized blocks. Two retention policies
+exist (0.12.0): *full* (`retain = :all`), and *active-only* (`retain =
+:active`), which drops the genomes no later step can use (dead, culled or
+too old to breed, and not genotyped) but keeps every animal's pedigree
+and records; a cohort's block is compacted to the genomes kept.
 
 ### 4.4 Meiosis ownership
 

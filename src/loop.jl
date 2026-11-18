@@ -45,8 +45,11 @@ Fields:
 - `tbv`, `phenotype`, `ebv`: `n × k` matrices, one column per trait, of
   genetic values, phenotypes (`NaN` in the sex that does not express the
   trait) and the last evaluation;
-- `blocks`, `first`: the haplotypes, one `Haplotype` per cohort, with
-  `first[t + 1]` the id of the first animal of cohort `t`;
+- `blocks`, `first`, `slot`: the haplotypes, one `Haplotype` per cohort
+  (`nothing` once no genome of the cohort is kept), with `first[t + 1]`
+  the id of the first animal of cohort `t` and `slot[i]` the position of
+  animal `i` in its cohort's block (`0` once its genome is dropped, see
+  `retain` in [`Scheme`](@ref)); read genomes with [`genomes`](@ref);
 - `qtl` (one `TraitQTL` per trait), `traits`, `Lr` (lower-triangular
   factor of the true residual covariance matrix, ``R = L_rL_r'``), `key`;
 - `G0`, `R0`: the genetic and residual covariance matrices of the next
@@ -68,8 +71,9 @@ mutable struct Population
     tbv::Matrix{Float64}
     phenotype::Matrix{Float64}
     ebv::Matrix{Float64}
-    blocks::Vector{Haplotype}
+    blocks::Vector{Union{Nothing,Haplotype}}
     first::Vector{Int}
+    slot::Vector{Int32}
     qtl::Vector{TraitQTL}
     traits::Vector{Trait}
     Lr::Matrix{Float64}
@@ -147,7 +151,7 @@ function _founders(hap, qs, traits, key, Re)
     G0 = σa .* C .* σa'
     R0 = σe .* Re .* σe'
     pop = Population(zeros(Int32, n), zeros(Int32, n), falses(n), zeros(Int32, n), fill(typemax(Int32), n), G,
-        fill(NaN, size(G)), fill(NaN, size(G)), [hap], [1], qs, traits, Lr, key, G0, R0,
+        fill(NaN, size(G)), fill(NaN, size(G)), Union{Nothing,Haplotype}[hap], [1], Int32.(1:n), qs, traits, Lr, key, G0, R0,
         Union{Nothing,MeiosisRecord}[])
     _sexes!(pop, 1:n, 0)
     _phenotypes!(pop, 1:n, 0)
@@ -365,7 +369,18 @@ A selection and mating scheme, applied every time step:
   estimated from the window's records too;
 - `ancestor_generations`: generations of ancestors traced above the
   animals of the window (default: all; then the relationships among the
-  window's animals are exact, and only records are discarded).
+  window's animals are exact, and only records are discarded);
+- `retain`: `:all` (default) keeps every genome. `:active` drops, after
+  each step, the genomes no later step can use: those of animals that
+  can no longer be parents (dead, culled, or past the maximum age of
+  their sex) and are not genotyped by `:ssgblup` (outside the last
+  `genotyped_cohorts` cohorts). The founders are kept (the base allele
+  frequencies). Pedigree and records are kept for every animal; memory
+  then grows with the animals that are still candidates, not with all
+  animals born. Not with `:gblup` or `:ssgblup` with every animal
+  genotyped, which need every genome. A dropped genome cannot be read
+  later ([`genomes`](@ref) throws), so summaries of past cohorts that
+  need genomes are taken during the run.
 
 Dead and culled animals are not candidates, and a record taken at an age
 the animal did not reach is missing.
@@ -394,9 +409,10 @@ Base.@kwdef struct Scheme
     record_meiosis::Bool = false
     window::Int = 0
     ancestor_generations::Int = typemax(Int)
+    retain::Symbol = :all
     function Scheme(noff, nsire, ndam, evaluation, selection, K, λ, κ, ub, chip, blend,
         max_sire_age, max_dam_age, reml, weights, survival, cull_unselected, genotyped_cohorts, ocs, ΔF,
-        record_meiosis, window, ancestor_generations)
+        record_meiosis, window, ancestor_generations, retain)
         noff > 1 && nsire > 0 && ndam > 0 || throw(ArgumentError("noff > 1, nsire > 0 and ndam > 0 are required"))
         max_sire_age >= 0 && max_dam_age >= 0 || throw(ArgumentError("maximum ages must be non-negative"))
         reml && !(evaluation in (:pblup, :gblup, :ssgblup)) &&
@@ -418,6 +434,10 @@ Base.@kwdef struct Scheme
         0 < ub <= 1 || throw(ArgumentError("ub must lie in (0, 1]"))
         all(isfinite, weights) && (isempty(weights) || any(!iszero, weights)) ||
             throw(ArgumentError("weights must be finite and not all zero"))
+        retain in (:all, :active) || throw(ArgumentError("retain must be :all or :active"))
+        retain == :active && (evaluation == :gblup || evaluation == :ssgblup && genotyped_cohorts == 0) &&
+            throw(ArgumentError("retain = :active needs the genomes of a bounded set of animals; :$evaluation " *
+                                "with every animal genotyped uses all of them (use :ssgblup with genotyped_cohorts > 0)"))
         window >= 0 && ancestor_generations >= 0 ||
             throw(ArgumentError("window and ancestor_generations must be non-negative"))
         window == 0 || window > max(max_sire_age, max_dam_age) || throw(ArgumentError(
@@ -425,7 +445,7 @@ Base.@kwdef struct Scheme
             "it must exceed the maximum ages"))
         new(noff, nsire, ndam, evaluation, selection, K, λ, κ, ub, Int32.(chip), blend,
             max_sire_age, max_dam_age, reml, Float64.(weights), Float64.(survival), cull_unselected,
-            genotyped_cohorts, ocs, ΔF, record_meiosis, window, ancestor_generations)
+            genotyped_cohorts, ocs, ΔF, record_meiosis, window, ancestor_generations, retain)
     end
 end
 
@@ -444,12 +464,30 @@ end
 
 # ---- evaluation --------------------------------------------------------
 
+"""
+    genomes(pop::Population[, ids]) -> Haplotype
+
+The phased genomes of the animals `ids` (default: all), two haplotypes
+per animal in the order of `ids`. An `ArgumentError` if the genome of one
+of them was dropped (`retain = :active` in [`Scheme`](@ref)); see
+[`retained`](@ref).
+"""
+genomes(pop::Population, ids = 1:length(pop)) = _haplotypes(pop, ids)
+
+"""
+    retained(pop::Population) -> Vector{Int}
+
+The ids of the animals whose genomes are kept.
+"""
+retained(pop::Population) = findall(>(0), pop.slot)
+
 function _haplotypes(pop::Population, ids)
     nlc = pop.blocks[1].nlc
     out = Haplotype(nlc, 2length(ids))
     for (k, i) in enumerate(ids)
         g = pop.generation[i] + 1
-        j = i - pop.first[g] + 1
+        j = Int(pop.slot[i])
+        j > 0 || throw(ArgumentError("the genome of animal $i was dropped (retain = :active)"))
         for h = 0:1
             copyto!(packed(out), (2k - 2 + h) * size(packed(out), 1) + 1, packed(pop.blocks[g]),
                 (2j - 2 + h) * size(packed(pop.blocks[g]), 1) + 1, size(packed(out), 1))
@@ -776,11 +814,49 @@ function step!(pop::Population, sc::Scheme, mm::MeiosisMap)
     append!(pop.exit, fill(typemax(Int32), sc.noff))
     push!(pop.blocks, off)
     push!(pop.first, n0 + 1)
+    append!(pop.slot, Int32.(1:sc.noff))
     _sexes!(pop, ids, g + 1)
     _phenotypes!(pop, ids, g + 1)
     segs = sc.record_meiosis ? founder_segments(pop, mm) : nothing
-    return merge(generation_summary(pop, g; weights = w, segs = segs), acc,
+    out = merge(generation_summary(pop, g; weights = w, segs = segs), acc,
         (nsire = length(s), ndam = length(d), L = L), _vc(pop), info)
+    sc.retain == :active && _drop_genomes!(pop, sc)
+    return out
+end
+
+# With retain = :active, after a step: drop the genomes no later step of
+# the scheme can use. At step t an animal's genome is used as a parent's
+# (alive and at most the maximum age of its sex) or as a genotype of
+# ssGBLUP (born in the last genotyped_cohorts cohorts); both stop for
+# good once they stop, since ages only grow and exits are final. The
+# founders are kept: they give the base allele frequencies of G and of
+# Fhet. A cohort's block is compacted to the genomes kept.
+function _needs_genome(pop::Population, sc::Scheme, i, t)
+    gen = pop.generation[i]
+    a = t - gen
+    gen == 0 && return true
+    pop.exit[i] > t && a <= (pop.male[i] ? sc.max_sire_age : sc.max_dam_age) && return true
+    return sc.evaluation == :ssgblup && a < sc.genotyped_cohorts
+end
+
+function _drop_genomes!(pop::Population, sc::Scheme)
+    t = current_step(pop)
+    nlc = pop.blocks[1].nlc
+    for c = 1:t-1                                          # cohorts 0 and t are kept
+        b = pop.blocks[c+1]
+        b === nothing && continue
+        ids = generation_ids(pop, c)
+        keep = filter(i -> pop.slot[i] > 0 && _needs_genome(pop, sc, i, t), ids)
+        length(keep) == count(i -> pop.slot[i] > 0, ids) && continue
+        if isempty(keep)
+            pop.blocks[c+1] = nothing
+        else
+            pop.blocks[c+1] = _haplotypes(pop, keep)
+        end
+        pop.slot[ids] .= 0
+        pop.slot[keep] .= Int32.(1:length(keep))
+    end
+    return pop
 end
 
 _no_ocs(sc::Scheme) = sc.selection == :ocs && sc.ocs != :fixed ?
@@ -869,6 +945,8 @@ segments segregate.
 """
 function generation_summary(pop::Population, g::Integer; weights = ones(ntraits(pop)), segs = nothing)
     ids = generation_ids(pop, g)
+    all(i -> pop.slot[i] > 0, ids) || throw(ArgumentError(
+        "genomes of cohort $g were dropped (retain = :active): its summary needs all of them"))
     hap = pop.blocks[g+1]
     F = nrm_diag(pop.sire, pop.dam)[ids] .- 1
     θ = mean(nrm(pop.sire, pop.dam, ids)) / 2             # mean coancestry, self included

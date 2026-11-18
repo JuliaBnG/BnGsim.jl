@@ -1,5 +1,31 @@
 # BnGsim.jl release notes
 
+## v0.12.0 (2026-11-18)
+
+### New
+
+- `Scheme(; retain = :active)`: after each step, drop the genomes no
+  later step can use, those of animals that can no longer be parents
+  (dead, culled, or past the maximum age of their sex) and are outside
+  the genotyped cohorts of `:ssgblup`. Founders are kept (base allele
+  frequencies). Pedigree and records stay for every animal, so memory
+  follows the animals still in use, not all animals born. A run with
+  `:active` is identical to one with `:all` (the default). Not with
+  `:gblup` or `:ssgblup` with every animal genotyped, which need every
+  genome.
+- `genomes(pop[, ids])`: the phased genomes of animals, in the order of
+  `ids` (an `ArgumentError` for a dropped one); `retained(pop)`: the ids
+  whose genomes are kept. Use these instead of reading `pop.blocks`.
+
+### Breaking
+
+- `Population` has a new field `slot` (each animal's position in its
+  cohort's block, `0` once dropped), and `blocks` is a
+  `Vector{Union{Nothing,Haplotype}}`. Checkpoints written by earlier
+  versions do not load (they were tied to the BnGsim version already).
+- `generation_summary` of a cohort whose genomes were dropped throws an
+  `ArgumentError`; the summaries of a run are taken during it.
+
 ## v0.11.1 (2026-11-18)
 
 ### New

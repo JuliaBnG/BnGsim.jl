@@ -27,6 +27,7 @@ include("survival.jl")
 include("ocs.jl")
 include("ibd.jl")
 include("pedigree-view.jl")
+include("retention.jl")
 
 @testset "Aqua" begin
     Aqua.test_all(BnGsim)
