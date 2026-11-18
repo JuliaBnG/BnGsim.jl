@@ -69,7 +69,7 @@ Ilocus = irm(labels)
 # genotypes of all animals (`gt` is padded to whole words: take the loci);
 # G centred on the founders' allele frequencies
 nlc = length(vm)
-H = Haplotype(reduce(hcat, [b.gt[1:nlc, :] for b in pop.blocks]))
+H = genomes(pop)
 p = vec(sum(hap.gt[1:nlc, :]; dims = 2)) ./ hap.nhp
 G = RelationshipMatrices.grm(H; p = p)
 nothing # hide
