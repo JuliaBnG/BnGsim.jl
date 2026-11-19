@@ -165,6 +165,30 @@ end
         @test hap_exp.nhp == 60 && hap_exp.nlc == length(vm_exp)
         @test nrow(cps_exp) > 0
 
+        # A locus count that is not a multiple of 64: Haplotype pads its
+        # BitMatrix to 64·cld(nlc, 64) rows. The padding is filled with
+        # random bits here, so a function that reads it fails or changes
+        # its output.
+        nlc_odd = 100
+        gt_odd = BitMatrix(rand(MersenneTwister(110), Bool, nlc_odd, 2nid))
+        gt_odd[:, 1] .= true
+        gt_odd[:, 2] .= false
+        hap_odd = Haplotype(gt_odd)
+        @test size(hap_odd.gt, 1) == 128
+        hap_odd.gt[nlc_odd+1:end, :] .= BitMatrix(rand(MersenneTwister(111), Bool, 28, 2nid))
+        vm_odd = VariantMap(UInt32.(round.(Int, range(1_000, 1_900_000; length = nlc_odd))), sp_toy;
+            frq = Float32.(vec(mean(gt_odd; dims = 2))))
+        hx, vx, cx = expand(hap_odd, vm_odd, sp_toy, 30, 3; rng = MersenneTwister(112))
+        @test hx isa Haplotype && vx isa VariantMap && hx.nhp == 60 && hx.nlc == length(vx) <= nlc_odd
+        @test size(hx.gt, 1) == 64 * cld(hx.nlc, 64) && issubset(vx.pos, vm_odd.pos)
+        @test vx.frq ≈ vec(mean(hx.gt[1:hx.nlc, :]; dims = 2)) && nrow(cx) > 0
+        hs, vs = sample_id(hap_odd, vm_odd, 12; rng = MersenneTwister(113))
+        @test hs.nhp == 24 && hs.nlc == length(vs) <= nlc_odd && issubset(vs.pos, vm_odd.pos)
+        @test vs.frq ≈ vec(mean(hs.gt[1:hs.nlc, :]; dims = 2))
+        vm_nofrq = VariantMap(vm_odd.chr, vm_odd.pos, vm_odd.ref, vm_odd.alt)
+        ps = sample_loci(hap_odd, vm_nofrq, SNPSet("all", 98; maf = 0.0); rng = MersenneTwister(114))
+        @test length(ps[1]) == 98 && all(<=(nlc_odd), ps[1].loci)
+
         # rnd_ped
         ped_r = rnd_ped(10, 3; rng = MersenneTwister(106))
         @test nrow(ped_r) == 40

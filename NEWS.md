@@ -1,5 +1,17 @@
 # BnGsim.jl release notes
 
+## v0.12.4 (unreleased)
+
+- Fixed: `expand` threw `DimensionMismatch` in its first generation
+  whenever the number of loci was not a multiple of 64. `Haplotype`
+  pads its `BitMatrix` to `64·cld(nlc, 64)` rows, and `expand` copied
+  the padded matrix into a gene drop that expects `nlc` rows. It now
+  copies the loci only; output for a multiple of 64 is unchanged.
+- `sample_id` and `sample_loci` (when `vm.frq` is empty) read the
+  padding rows too; with the zero padding that `Haplotype` writes,
+  frequency 0 kept them out, but non-zero padding gave a `BoundsError`.
+  Both now read the loci only; output is unchanged.
+
 ## v0.12.3 (2026-11-19)
 
 - Allows FisherWright 0.10 as well as 0.8.1 and 0.9. FisherWright 0.10
