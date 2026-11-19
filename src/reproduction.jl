@@ -360,7 +360,8 @@ function expand(
     check_coordinates(vm, sp)
     lms = sum_map(sp)
     p = (n_t / n0)^(1 / t)
-    prt = copy(hap.gt)
+    # Haplotype pads its BitMatrix to 64·cld(nlc, 64) rows; the loci only.
+    prt = hap.gt[1:nlc, :]
     np = n0
     cps = DataFrame()
 
@@ -421,7 +422,7 @@ function sample_id(
         cols[2k - 1] = 2id - 1
         cols[2k] = 2id
     end
-    sub_gt = hap.gt[:, cols]
+    sub_gt = hap.gt[1:nlc, cols]
     frq = Float32.(vec(mean(sub_gt; dims = 2)))
     vld = findall(f -> maf < f < 1.0 - maf, frq)
     vm_out = VariantMap(vm.chr[vld], vm.pos[vld], vm.ref[vld], vm.alt[vld], frq[vld])
@@ -457,7 +458,7 @@ function sample_loci(
         push!(names_seen, s.name)
     end
 
-    frq = isempty(vm.frq) ? vec(mean(hap.gt; dims = 2)) : Float64.(vm.frq)
+    frq = isempty(vm.frq) ? vec(mean(view(hap.gt, 1:nlc, :); dims = 2)) : Float64.(vm.frq)
     all_loci = collect(Int32(1):Int32(nlc))
     used = Int32[]
     out = Vector{LocusSet}(undef, length(sets))
