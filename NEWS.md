@@ -1,5 +1,13 @@
 # BnGsim.jl release notes
 
+## v0.12.3 (2026-11-19)
+
+- Allows FisherWright 0.10 as well as 0.8.1 and 0.9. FisherWright 0.10
+  moved the per-generation record of a result into `result.records`,
+  made `to_haplotype(result)` return a `VariantMap` and removed
+  `quickGT`/`quickHap`; BnGsim uses none of these, and its seeded output
+  is the same with every allowed version. No breaking changes.
+
 ## v0.12.2 (2026-11-19)
 
 - Allows FisherWright 0.9 as well as 0.8.1. FisherWright 0.9 changed
