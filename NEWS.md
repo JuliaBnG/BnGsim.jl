@@ -1,5 +1,13 @@
 # BnGsim.jl release notes
 
+## v0.12.2 (2026-11-19)
+
+- Allows FisherWright 0.9 as well as 0.8.1. FisherWright 0.9 changed
+  only its trait records (matrices for several traits) and added
+  sex-specific fitness; BnGsim runs neutral founder populations and reads
+  none of those records, so its output is the same with either version.
+  No breaking changes.
+
 ## v0.12.1 (2026-11-18)
 
 - Requires Breeding 0.4, whose `TM1997` returns its contributions with a
