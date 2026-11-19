@@ -1,5 +1,12 @@
 # BnGsim.jl release notes
 
+## v0.12.5 (2026-11-19)
+
+- Allows FisherWright 0.11 as well as 0.8.1, 0.9 and 0.10. FisherWright
+  0.11 adds assortative mating, a `mate_correlation` record and result
+  file format 2; BnGsim uses none of these, and its seeded output is the
+  same with every allowed version. No breaking changes.
+
 ## v0.12.4 (unreleased)
 
 - Fixed: `expand` threw `DimensionMismatch` in its first generation
