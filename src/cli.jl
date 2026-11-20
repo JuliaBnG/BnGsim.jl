@@ -17,13 +17,12 @@ The exit codes of the `bngsim` command line. They are part of its interface
 | 2 | `USAGE` | unknown command, missing or invalid arguments |
 | 3 | `INVALID_SCENARIO` | the scenario file is missing, unreadable or does not validate |
 | 4 | `REJECTED` | refused before running: the output directory exists and is not empty |
-| 5 | `BUDGET_EXCEEDED` | reserved: a resource budget was exceeded |
+| 5 | `BUDGET_EXCEEDED` | refused before running: the memory bound of `resource_estimate` exceeds `--memory-limit` |
 | 6 | `SIMULATION_FAILED` | the simulation stopped with an explicit error (e.g. too few loci pass a `maf` filter) |
 | 7 | `CANCELLED` | reserved: cancelled at a checkpoint |
 | 70 | `INTERNAL_ERROR` | an unexpected error (a bug) |
 
-Codes 5 and 7 are reserved for `estimate`/budgets and `resume`, which the
-CLI does not have yet.
+Code 7 is reserved for `resume`, which the CLI does not have yet.
 """
 module ExitCode
 const OK = 0
@@ -38,8 +37,11 @@ end
 
 const _CLI_USAGE = """
 usage: bngsim validate SCENARIO.json
-       bngsim run SCENARIO.json --out DIR [--replicates A:B]
+       bngsim estimate SCENARIO.json
+       bngsim run SCENARIO.json --out DIR [--replicates A:B] [--memory-limit SIZE]
        bngsim version [--json]
+
+SIZE is bytes, or a number with K, M, G or T (powers of 1024), e.g. 16G.
 
 Writes one JSON object to stdout and diagnostics to stderr; see the exit
 codes in the BnGsim documentation (ExitCode)."""
@@ -104,11 +106,15 @@ code ([`ExitCode`](@ref)). `bin/bngsim` calls it as
 - `validate SCENARIO.json`: read and check the scenario. Prints
   `{"status": "valid", "scenario_sha256", ...}` or
   `{"status": "invalid", "errors": [...]}` (exit code 3).
-- `run SCENARIO.json --out DIR [--replicates A:B]`: run the scenario
-  (replicates `A:B`, all by default) and write to `DIR`, which must not
-  exist or be empty: `scenario.json` (the canonical scenario),
-  `summary.csv` (the per-step summaries of every replicate) and
+- `estimate SCENARIO.json`: the expected peak memory, a conservative
+  bound, the disk written and a rough run time ([`resource_estimate`](@ref)).
+- `run SCENARIO.json --out DIR [--replicates A:B] [--memory-limit SIZE]`:
+  run the scenario (replicates `A:B`, all by default) and write to `DIR`,
+  which must not exist or be empty: `scenario.json` (the canonical
+  scenario), `summary.csv` (the per-step summaries of every replicate) and
   `provenance.json`. Prints `{"status": "completed", "outputs": ...}`.
+  With `--memory-limit`, a scenario whose memory bound exceeds `SIZE` is
+  refused before it runs (exit code 5).
 - `version [--json]`: the BnGsim version, the CLI interface and scenario
   schema versions, the Julia and package versions and the hash of the
   active manifest.
@@ -125,6 +131,7 @@ function cli(args::AbstractVector{<:AbstractString}; stdout::IO=Base.stdout, std
         cmd, rest = args[1], args[2:end]
         cmd == "validate" && return _cli_validate(rest, stdout, stderr)
         cmd == "run" && return _cli_run(rest, stdout, stderr)
+        cmd == "estimate" && return _cli_estimate(rest, stdout, stderr)
         cmd == "version" && return _cli_version(rest, stdout, stderr)
         cmd in ("-h", "--help", "help") && (println(stdout, _CLI_USAGE); return ExitCode.OK)
         return _usage(stderr, "unknown command \"$cmd\"")
@@ -189,15 +196,18 @@ function _cli_version(args, stdout, stderr)
 end
 
 function _parse_run_args(args)
-    scen, out, reps = nothing, nothing, nothing
+    scen, out, reps, limit = nothing, nothing, nothing, nothing
     i = 1
     while i <= length(args)
         a = args[i]
-        if a == "--out" || a == "--replicates"
+        if a == "--out" || a == "--replicates" || a == "--memory-limit"
             i < length(args) || return "$a needs a value"
             v = args[i+1]
             if a == "--out"
                 out = v
+            elseif a == "--memory-limit"
+                limit = _parse_size(v)
+                limit === nothing && return "--memory-limit takes bytes or a number with K, M, G or T, e.g. 16G"
             else
                 m = match(r"^(\d+)(?::(\d+))?$", v)
                 m === nothing && return "--replicates takes A or A:B, e.g. 1:10"
@@ -216,14 +226,14 @@ function _parse_run_args(args)
     end
     scen === nothing && return "run needs a scenario file"
     out === nothing && return "run needs --out DIR"
-    return (scen, out, reps)
+    return (scen, out, reps, limit)
 end
 
 function _cli_run(args, stdout, stderr)
     O = JSON.Object{String,Any}
     p = _parse_run_args(args)
     p isa String && return _usage(stderr, p)
-    path, out, reps = p
+    path, out, reps, limit = p
     s = _load(path, stdout, stderr)
     s isa Integer && return s
     reps = something(reps, 1:s.replicates)
@@ -238,6 +248,17 @@ function _cli_run(args, stdout, stderr)
         println(stderr, "bngsim: ", msg)
         _emit(stdout, O("status" => "rejected", "message" => msg))
         return ExitCode.REJECTED
+    end
+    if limit !== nothing
+        e = resource_estimate(s)
+        if e.peak_rss_bound_bytes > limit
+            msg = "the memory bound of the scenario, $(_human(e.peak_rss_bound_bytes)), exceeds --memory-limit " *
+                  "$(_human(limit)) (expected peak $(_human(e.peak_rss_bytes)))"
+            println(stderr, "bngsim: ", msg)
+            _emit(stdout, O("status" => "rejected", "message" => msg, "peak_rss_bytes" => e.peak_rss_bytes,
+                "peak_rss_bound_bytes" => e.peak_rss_bound_bytes, "memory_limit_bytes" => limit))
+            return ExitCode.BUDGET_EXCEEDED
+        end
     end
     j = scenario_json(s)
     started = now(UTC)
@@ -266,5 +287,32 @@ function _cli_run(args, stdout, stderr)
     open(io -> _emit(io, prov), joinpath(out, "provenance.json"), "w")
     _emit(stdout, O("status" => "completed", "scenario_sha256" => _sha256(j), "replicates" => collect(reps),
         "outputs" => [joinpath(out, f) for f in [files; "provenance.json"]], "seconds" => round(t; digits=3)))
+    return ExitCode.OK
+end
+
+# Bytes from "123", "512M", "16G", "1.5T" (powers of 1024).
+function _parse_size(v::AbstractString)
+    m = match(r"^(\d+(?:\.\d+)?)([KMGT]?)i?B?$"i, strip(v))
+    m === nothing && return nothing
+    x = parse(Float64, m[1]) * 1024.0^(findfirst(==(uppercase(m[2])), ["", "K", "M", "G", "T"]) - 1)
+    return x >= 1 ? round(Int, x) : nothing
+end
+
+_human(b) = b >= 2^30 ? string(round(b / 2^30; digits=2), " GiB") : string(round(b / 2^20; digits=1), " MiB")
+
+function _cli_estimate(args, stdout, stderr)
+    length(args) == 1 || return _usage(stderr, "estimate takes one scenario file")
+    s = _load(args[1], stdout, stderr)
+    s isa Integer && return s
+    e = resource_estimate(s)
+    z = e.size
+    O = JSON.Object{String,Any}
+    _emit(stdout, O("status" => "estimated", "scenario" => s.name, "scenario_sha256" => _sha256(scenario_json(s)),
+        "peak_rss_bytes" => e.peak_rss_bytes, "peak_rss_bound_bytes" => e.peak_rss_bound_bytes,
+        "memory_terms" => O(string(k) => v for (k, v) in pairs(e.memory_terms)),
+        "disk_bytes" => e.disk_bytes, "seconds" => e.seconds,
+        "size" => O(string(f) => getfield(z, f) for f in fieldnames(ScenarioSize)),
+        "calibration" => "AMD Threadripper 3970X, Linux x86_64, Julia 1.13.4, 8 threads; memory within ±15 % " *
+                         "(scenario means), time within a factor of about two"))
     return ExitCode.OK
 end

@@ -30,6 +30,7 @@ include("provenance.jl")
 include("historical.jl")
 include("founder-summary.jl")
 include("scenario.jl")
+include("estimate.jl")
 include("cli.jl")
 
 export sum_map, sumMap, crossovers, gamete!, gene_drop, gene_drop!
@@ -51,6 +52,7 @@ export ld_decay, vanraden_g, founder_summary
 export Scenario, ScenarioError, read_scenario, parse_scenario, validate_scenario, write_scenario, scenario_json,
     scenario_dict, run_scenario, run_replicate
 export cli, ExitCode
+export resource_estimate, ScenarioSize
 
 include("precompile.jl")
 
