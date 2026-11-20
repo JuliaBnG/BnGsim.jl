@@ -17,6 +17,7 @@ makedocs(
     format = Documenter.HTML(assets = JULIABNG_ASSETS),
     pages = [
         "Home" => "index.md",
+        "Scenarios" => "scenarios.md",
         "Relationships: A, G and IBD" => "relationships.md",
         "API Reference" => "api.md",
         "Roadmap" => "roadmap.md",

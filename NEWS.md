@@ -1,5 +1,30 @@
 # BnGsim.jl release notes
 
+## v0.13.0 (2026-11-20)
+
+### New
+
+- Scenarios: a simulation described in JSON (schema `"bngsim-scenario"`,
+  version 1): species, historical population and founders, QTL and chip
+  loci, traits, the breeding scheme, steps, seed and replicates; keys
+  mirror the Julia API (`scheme` takes the keywords of `Scheme`).
+  `read_scenario`, `parse_scenario` and `validate_scenario` check the
+  whole document and report every problem with its path (unknown,
+  repeated and mistyped keys, out-of-range values, inconsistent
+  combinations); `scenario_json` and `write_scenario` write the
+  canonical form, every key present, which reads back equal.
+  `run_scenario` and `run_replicate` run it, every draw keyed from the
+  scenario's seed, so that a replicate is the same alone or with others
+  and on any number of threads. Example: `examples/minimal.json`; docs
+  page "Scenarios".
+- New dependency: JSON.jl (1).
+
+### Breaking
+
+- Requires FisherWright 0.8.2 or later (the per-chromosome genetic
+  lengths of the species in the historical population); 0.8.1 is
+  dropped.
+
 ## v0.12.5 (2026-11-19)
 
 - Allows FisherWright 0.11 as well as 0.8.1, 0.9 and 0.10. FisherWright
@@ -7,7 +32,7 @@
   file format 2; BnGsim uses none of these, and its seeded output is the
   same with every allowed version. No breaking changes.
 
-## v0.12.4 (unreleased)
+## v0.12.4 (2026-11-19)
 
 - Fixed: `expand` threw `DimensionMismatch` in its first generation
   whenever the number of loci was not a multiple of 64. `Haplotype`
