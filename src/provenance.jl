@@ -3,7 +3,7 @@
 
 Write a run header recording what is needed to reproduce a simulation: the
 date, host, CPU, Julia version, thread count, BLAS threads, the seed, and for
-each JuliaBnG package its version (Breeding only when loaded), git commit and whether its working tree
+each JuliaBnG package its version, git commit and whether its working tree
 was dirty. Lines are prefixed with `# ` so the header can sit on top of a
 plain-text log or table.
 
@@ -28,15 +28,9 @@ function provenance(io::IO = stdout; seed = nothing, extra = Dict{String,Any}())
     return nothing
 end
 
-# Breeding.jl is not a dependency of BnGsim (it requires a newer Julia than
-# BnGsim supports); it is reported when the session has loaded it.
-const _BREEDING = Base.PkgId(Base.UUID("cb565f4f-111b-40c2-8768-3bafadb18772"), "Breeding")
-
 function _provenance_modules()
-    mods = Module[BnGStructs, FisherWright, RelationshipMatrices]
-    Base.root_module_exists(_BREEDING) && push!(mods, Base.root_module(_BREEDING))
-    push!(mods, BnGsim)
-    return mods
+    return Module[BnGStructs, FisherWrightAdapter.PACKAGE, RelationshipsAdapter.PACKAGE, BreedingAdapter.PACKAGE,
+        BnGsim]
 end
 
 function _pkg_state(m::Module)

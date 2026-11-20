@@ -5,18 +5,24 @@ using Dates
 using LinearAlgebra
 using Mmap
 using Serialization
-using FisherWright
 using JSON
 using SHA: sha256
 using PrecompileTools: @setup_workload, @compile_workload
-using RelationshipMatrices
-using Breeding: Breeding, MME, mme, RandomEffect, solve_mme, incidence, TM1997, feasible, rocs, pev_candidates, reml,
-    MultiTrait, mt_stack, mt_blocks, mt_rinv
 using DataFrames
 using Distributions
 using Random
 using Statistics
 using StatsBase: sample
+
+# Upstream packages are imported only through these adapters
+# (docs/src/upstream-contract.md).
+include("adapters/fisherwright.jl")
+include("adapters/relationships.jl")
+include("adapters/breeding.jl")
+using .FisherWrightAdapter
+using .RelationshipsAdapter
+import .RelationshipsAdapter: founder_segments
+using .BreedingAdapter
 
 include("keys.jl")
 include("reproduction.jl")

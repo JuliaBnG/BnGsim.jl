@@ -1092,7 +1092,7 @@ chromosomes of `mm`. Founder haplotype `h` is haplotype `h` of cohort 0.
 matrix and `segment_inbreeding(segs)` the realized inbreeding, without
 sampling loci.
 """
-function RelationshipMatrices.founder_segments(pop::Population, mm::MeiosisMap)
+function founder_segments(pop::Population, mm::MeiosisMap)
     nchr = length(mm.first)
     m = isempty(pop.meioses) ? Meioses(Int32[], Int32[], falses(nchr, 0), [1], UInt32[]) : meioses(pop)
     founder_segments(pop.sire, pop.dam, m, [mm.first[c]:mm.last[c] for c = 1:nchr])

@@ -34,6 +34,7 @@ include("cli.jl")
 include("estimate.jl")
 include("resume.jl")
 include("archive.jl")
+include("adapters.jl")
 
 @testset "Aqua" begin
     Aqua.test_all(BnGsim)
@@ -280,8 +281,7 @@ end
     dec2 = continue_population(res, [20, 10], 5.0; M = spec.M, rng = MersenneTwister(2))
     @test dec2.active_haplotypes == dec.active_haplotypes
     # The record is `dec.records` from FisherWright 0.10, fields of the result before.
-    census = hasproperty(dec, :records) ? dec.records.census : dec.census
-    @test census[end-2:end] == [spec.ne, 20, 10]
+    @test BnGsim.census(dec)[end-2:end] == [spec.ne, 20, 10]
     @test continue_population(res, Int[], 5.0) === res
     @test_throws ArgumentError continue_population(res, [20, 1], 5.0)
     # A seed and the stream it starts are the same request, and the stream of
