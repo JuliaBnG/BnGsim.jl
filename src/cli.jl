@@ -38,6 +38,7 @@ const _CLI_USAGE = """
 usage: bngsim validate SCENARIO.json
        bngsim estimate SCENARIO.json
        bngsim run SCENARIO.json --out DIR [--replicates A:B] [--memory-limit SIZE] [--checkpoint-every K]
+                  [--archive none|chip|qtl|all]
        bngsim resume DIR
        bngsim version [--json]
 
@@ -121,6 +122,9 @@ code ([`ExitCode`](@ref)). `bin/bngsim` calls it as
   time step, with the state saved (exit code 7), and with
   `--checkpoint-every K` the state is also saved every `K` steps, so that
   a killed process can be resumed.
+  With `--archive none|chip|qtl|all`, an archive of each replicate
+  ([`write_archive`](@ref)) is written to `DIR/archive/r<N>/` when it
+  finishes, and listed in `provenance.json`.
 - `resume DIR`: continue a stopped or killed run from its last saved
   state (removing `DIR/CANCEL`). The outputs are those of an
   uninterrupted run, byte for byte; `provenance.json` lists every session.
@@ -208,15 +212,18 @@ function _cli_version(args, stdout, stderr)
 end
 
 function _parse_run_args(args)
-    scen, out, reps, limit, every = nothing, nothing, nothing, nothing, 0
+    scen, out, reps, limit, every, archive = nothing, nothing, nothing, nothing, 0, nothing
     i = 1
     while i <= length(args)
         a = args[i]
-        if a in ("--out", "--replicates", "--memory-limit", "--checkpoint-every")
+        if a in ("--out", "--replicates", "--memory-limit", "--checkpoint-every", "--archive")
             i < length(args) || return "$a needs a value"
             v = args[i+1]
             if a == "--out"
                 out = v
+            elseif a == "--archive"
+                v in ("none", "chip", "qtl", "all") || return "--archive takes none, chip, qtl or all"
+                archive = Symbol(v)
             elseif a == "--checkpoint-every"
                 k = tryparse(Int, v)
                 (k === nothing || k < 1) && return "--checkpoint-every takes a positive number of steps"
@@ -242,20 +249,22 @@ function _parse_run_args(args)
     end
     scen === nothing && return "run needs a scenario file"
     out === nothing && return "run needs --out DIR"
-    return (scen, out, reps, limit, every)
+    return (scen, out, reps, limit, every, archive)
 end
 
 function _cli_run(args, stdout, stderr)
     O = JSON.Object{String,Any}
     p = _parse_run_args(args)
     p isa String && return _usage(stderr, p)
-    path, out, reps, limit, every = p
+    path, out, reps, limit, every, archive = p
     s = _load(path, stdout, stderr)
     s isa Integer && return s
     reps = something(reps, 1:s.replicates)
     if isempty(reps) || first(reps) < 1 || last(reps) > s.replicates
         return _reject(stdout, stderr, "--replicates $(first(reps)):$(last(reps)) is outside 1:$(s.replicates)")
     end
+    archive === :chip && s.chip === nothing &&
+        return _reject(stdout, stderr, "--archive chip needs a chip (loci.chip) in the scenario")
     if isdir(_state_dir(out))
         return _reject(stdout, stderr, "$out holds an unfinished run; continue it with `bngsim resume $out`")
     elseif ispath(out) && !(isdir(out) && isempty(readdir(out)))
@@ -274,7 +283,8 @@ function _cli_run(args, stdout, stderr)
     end
     created = !ispath(out)
     mkpath(_state_dir(out))
-    run = (scenario=scenario_json(s), replicates=collect(reps), checkpoint_every=every, sessions=Any[])
+    run = (scenario=scenario_json(s), replicates=collect(reps), checkpoint_every=every, archive=archive,
+        sessions=Any[])
     _save_state(joinpath(_state_dir(out), "run.jls"), run)
     return _drive(out, s, run, stdout, stderr; created)
 end
@@ -312,7 +322,8 @@ function _drive(out, s, run, stdout, stderr; created, should_stop=(r, g) -> _can
     started = now(UTC)
     t0 = time()
     result = try
-        _execute(out, s, reps; checkpoint_every=run.checkpoint_every, should_stop=should_stop)
+        _execute(out, s, reps; checkpoint_every=run.checkpoint_every, should_stop=should_stop,
+            on_replicate=(r, rep) -> _archive(out, _run_archive(run), r, rep))
     catch e
         e isa ArgumentError || e isa DimensionMismatch || e isa ErrorException || rethrow()
         msg = sprint(showerror, e)
@@ -351,6 +362,11 @@ function _drive(out, s, run, stdout, stderr; created, should_stop=(r, g) -> _can
         "threads" => Threads.nthreads(), "started" => sessions[1]["started"], "finished" => session["finished"],
         "seconds" => seconds, "checkpoint_every" => run.checkpoint_every, "sessions" => sessions,
         "outputs" => hashes)
+    if _run_archive(run) !== nothing
+        dir = joinpath(out, "archive")
+        prov["archive"] = O("panel" => String(_run_archive(run)), "files" => O(relpath(f, out) => _sha256_file(f)
+            for f in sort(_files_under(dir))))
+    end
     open(io -> _emit(io, prov), joinpath(out, "provenance.json"), "w")
     rm(st; recursive=true)
     rm(joinpath(out, "CANCEL"); force=true)
@@ -386,3 +402,15 @@ function _cli_estimate(args, stdout, stderr)
                          "(scenario means), time within a factor of about two"))
     return ExitCode.OK
 end
+
+# The archive of replicate `r` in `out/archive/r<r>/`.
+function _archive(out, panel, r, rep)
+    panel === nothing && return nothing
+    loci = panel === :chip ? rep.chip : panel === :qtl ? rep.qtl : panel === :all ? (1:length(rep.map)) : Int32[]
+    write_archive(joinpath(out, "archive", "r$r"), rep.population, rep.map, rep.species; panel=loci, qtl=rep.qtl)
+    return nothing
+end
+
+_run_archive(run) = hasproperty(run, :archive) ? run.archive : nothing
+
+_files_under(dir) = isdir(dir) ? [joinpath(root, f) for (root, _, fs) in walkdir(dir) for f in fs] : String[]

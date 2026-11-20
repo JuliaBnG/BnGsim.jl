@@ -1,5 +1,27 @@
 # BnGsim.jl release notes
 
+## v0.17.0 (2026-11-20)
+
+### New
+
+- Archives: `bngsim run ... --archive none|chip|qtl|all` writes, for each
+  replicate, `pedigree.csv`, `records.csv` (phenotypes as recorded),
+  `truth.csv` (true and estimated breeding values), `traits.csv`,
+  `qtl.csv` (QTL and their effects) and PLINK 1 binary genotypes
+  (`.bed/.bim/.fam`) at the loci of the panel, to `DIR/archive/r<N>/`,
+  listed with their SHA-256 in `provenance.json`; a resumed run writes
+  the same files. `write_archive` writes one from Julia. The genotypes
+  were checked with PLINK 1.9 and plink2. Docs page "Archives".
+- `infinitesimal(sire, dam, G0, R0, key)`: breeding values exactly
+  `N(0, G0 ⊗ A)` and phenotypes on a pedigree, by Mendelian sampling, each
+  animal from its own keyed stream (new `Domain.INFINITESIMAL`).
+
+### Fixed
+
+- The placeholder nucleotides (`ref`, `alt`) of the map of a scenario run
+  came from Julia's global generator and differed between runs; they are
+  now keyed from the scenario's seed. Nothing else depended on them.
+
 ## v0.16.0 (2026-11-20)
 
 ### New

@@ -32,6 +32,7 @@ include("founder-summary.jl")
 include("scenario.jl")
 include("estimate.jl")
 include("runner.jl")
+include("archive.jl")
 include("cli.jl")
 
 export sum_map, sumMap, crossovers, gamete!, gene_drop, gene_drop!
@@ -54,6 +55,7 @@ export Scenario, ScenarioError, read_scenario, parse_scenario, validate_scenario
     scenario_dict, run_scenario, run_replicate
 export cli, ExitCode
 export resource_estimate, ScenarioSize
+export write_archive, infinitesimal
 
 include("precompile.jl")
 
