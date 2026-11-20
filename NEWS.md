@@ -1,5 +1,28 @@
 # BnGsim.jl release notes
 
+## v0.18.0 (2026-11-20)
+
+### New
+
+- Adapter layer (roadmap §4.1): FisherWright, RelationshipMatrices and
+  Breeding are imported only in `src/adapters/`, one module each, which
+  re-exports the names BnGsim uses and absorbs differences between their
+  versions (`census(res)` for the census record before and after
+  FisherWright 0.10; `dense_haplotypes` passing an `rng` where
+  FisherWright accepts one). A layering test fails if any other source
+  file names these packages, and contract tests pin the conventions
+  BnGsim relies on (haplotype layout and coordinates, `ainv = inv(nrm)`,
+  `grm` and `hinv` against their formulas, `mme` against a dense solve
+  of Henderson's equations, `TM1997`). Docs page "Upstream contract".
+
+### Changed
+
+- `founder_haplotypes` and `sample_founder_population` draw the
+  placeholder nucleotides of their map from a copy of their `rng` (with
+  FisherWright 0.10 or later) instead of the global generator, so the map
+  is reproducible; the caller's stream does not advance, so the founders,
+  QTL and everything else drawn from it are unchanged.
+
 ## v0.17.0 (2026-11-20)
 
 ### New

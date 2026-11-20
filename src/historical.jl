@@ -136,7 +136,7 @@ function founder_haplotypes(res::FisherWrightResult, nid::Integer; rng::Abstract
         muts[2k-1] = res.active_haplotypes[2i-1]
         muts[2k] = res.active_haplotypes[2i]
     end
-    return muts2bitarray(muts, res.chromosome_ends)
+    return dense_haplotypes(muts, res.chromosome_ends; rng=copy(rng))   # the caller's stream does not advance
 end
 
 """

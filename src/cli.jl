@@ -62,7 +62,8 @@ end
 function _package_versions()
     O = JSON.Object{String,Any}
     out = O("BnGsim" => string(pkgversion(BnGsim)))
-    for m in (BnGStructs, FisherWright, RelationshipMatrices, Breeding, JSON, DataFrames, Distributions)
+    for m in (BnGStructs, FisherWrightAdapter.PACKAGE, RelationshipsAdapter.PACKAGE, BreedingAdapter.PACKAGE, JSON,
+        DataFrames, Distributions)
         out[string(nameof(m))] = string(pkgversion(m))
     end
     return out

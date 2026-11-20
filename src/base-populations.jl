@@ -1,6 +1,4 @@
 using BnGStructs
-using FisherWright
-using RelationshipMatrices
 using DataFrames
 using Distributions
 using Random
@@ -97,7 +95,7 @@ function sample_founder_population(
         rng = rng,
     )
 
-    bit_gt, map_df = muts2bitarray(res.active_haplotypes, res.chromosome_ends)
+    bit_gt, map_df = dense_haplotypes(res.active_haplotypes, res.chromosome_ends; rng=copy(rng))
     vm = _to_variant_map(map_df)
     return sample_founder_population(
         species,

@@ -1,5 +1,5 @@
 # API Reference
 
 ```@autodocs
-Modules = [BnGsim, BnGsim.Domain, BnGsim.ExitCode]
+Modules = [BnGsim, BnGsim.Domain, BnGsim.ExitCode, BnGsim.FisherWrightAdapter]
 ```
