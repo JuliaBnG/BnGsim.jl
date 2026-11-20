@@ -1,0 +1,12 @@
+{
+  "schema": "bngsim-scenario",
+  "schema_version": 1,
+  "name": "minimal",
+  "seed": 2026,
+  "steps": 3,
+  "species": {"name": "toy", "chromosome": [20000000, 10000000], "M": 100000000},
+  "founders": {"ne": 100, "nt": 500, "mr": 1.0, "nid": 50},
+  "loci": {"qtl": {"nlc": 50, "maf": 0.01}},
+  "traits": [{"name": "y", "h2": 0.3}],
+  "scheme": {"noff": 50, "nsire": 5, "ndam": 20, "evaluation": "phenotype", "selection": "truncation"}
+}

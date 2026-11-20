@@ -74,7 +74,8 @@ here.
 | Breeding loop | `Population` (ids equal rows; nothing is removed), `Scheme`, `step!`/`simulate!`: discrete or overlapping generations (parents up to a maximum age), one or several additive traits with sex- and age-limited records, selection on an index of multi-trait EBVs, optional (multi-trait) REML re-estimation of the covariance components, survival and culling, single-step GBLUP with a genotyped window, OCS with a target ΔF per generation for overlapping generations (newborn-cohort, age-weighted per year, age-weighted per generation), crossover records kept for realized IBD from founder segments (`founder_segments`, RelationshipMatrices 0.7.1), checkpoints that resume a run identically, evaluation through Breeding.jl (`:tbv`, `:phenotype`, `:pblup`, `:gblup`, `:ssgblup`), optionally on a window of recent cohorts and their traced ancestors through a `PedigreeView` (id ↔ row, topological, `0` for parents outside), selection by truncation, `TM1997`, `rocs` or at random, `(criterion, id)` ranking, keyed pairing and meiosis, per-generation summaries. |
 | Scenarios | A versioned JSON scenario (`Scenario`, schema `"bngsim-scenario"` version 1, 0.13.0): species, historical population and founders, QTL and chip panels, traits, scheme, steps, seed, replicates. Reading and validation that report every problem with its path (unknown, repeated and mistyped keys, ranges, combinations), a canonical form that survives a JSON round trip, and `run_scenario`/`run_replicate`, keyed so that a replicate does not depend on the others or on threads. |
 | Command line | `bin/bngsim validate | run | version` (0.14.0, CLI interface 1): one JSON object on stdout, diagnostics on stderr, enumerated exit codes; `run` writes the canonical scenario, `summary.csv` (byte-identical at 1 and 8 threads) and `provenance.json` (scenario and its SHA-256, versions, manifest hash, host, CPU, threads, times, output hashes; I2), and never overwrites. A precompile workload brings a cold `bngsim run examples/minimal.json` to about 3 s (Phase 0 gate: under 10 s). |
-| Not started | `bngsim estimate` and `resume` (exit codes 5 and 7 reserved), adapter layer; removal of animals' records from the store (ids stay rows of the store; `PedigreeView` is the boundary once they do not). Genomes are dropped once unusable (`retain = :active`, 0.12.0). |
+| Resource estimate | `resource_estimate` / `bngsim estimate` (0.15.0): expected peak memory from a component model (process, historical population, genomes, dense evaluation; sizes from neutral theory), fitted on 16 scenarios and checked on 6 held out (every mean within 15 %; `examples/minimal.json` within 10 %), a bound of 1.3 × the expectation that no run exceeded, disk, and a rough run time; `run --memory-limit` refuses a scenario whose bound exceeds it (exit code 5). Calibrated on one host; scripts in `validation/estimate/`. |
+| Not started | `bngsim resume` (exit code 7 reserved), adapter layer; removal of animals' records from the store (ids stay rows of the store; `PedigreeView` is the boundary once they do not). Genomes are dropped once unusable (`retain = :active`, 0.12.0). |
 
 The breeding loop is keyed by coordinate (§4.2): meiosis, sexes,
 phenotypes, random selection and pairing each draw from their own
@@ -296,6 +297,10 @@ golden test passes.
 **Gate:** the config survives a JSON round trip unchanged. About 30 malformed
 manifests are rejected with explicit errors. `estimate` is within ±25% of the
 measured peak RAM on the smoke scenario. The CLI contract test passes.
+(0.15.0: the ±25% applies to the expected peak, which is also checked on 21
+other scenarios; the bound used for admission is never below a measured
+run. The garbage collector alone moves the peak of one scenario by up to
+25% between runs, so the gate is checked on the mean of two.)
 
 ### Phase 2 — Founders, genomic architecture, traits *(partly done)*
 

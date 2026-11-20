@@ -1,0 +1,6 @@
+{"schema": "bngsim-scenario", "schema_version": 1, "name": "v4", "seed": 3, "steps": 6,
+ "species": {"name": "toy", "chromosome": [50000000, 50000000]},
+ "founders": {"ne": 1000, "nt": 1000, "mr": 1.0, "nid": 1000},
+ "loci": {"qtl": {"nlc": 200, "maf": 0.01}},
+ "traits": [{"name": "t1", "h2": 0.3}, {"name": "t2", "h2": 0.3}],
+ "scheme": {"noff": 2500, "nsire": 50, "ndam": 500, "evaluation": "pblup", "genotyped_cohorts": 0}}

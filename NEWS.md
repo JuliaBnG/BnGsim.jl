@@ -1,5 +1,24 @@
 # BnGsim.jl release notes
 
+## v0.15.0 (2026-11-20)
+
+### New
+
+- `resource_estimate(scenario)` and `bngsim estimate SCENARIO.json`: the
+  expected peak resident memory of a run, a conservative bound (1.3 × the
+  expectation), the disk written and a rough run time, from the scenario
+  alone. Memory is a component model (the process, the historical
+  population, the packed genomes, the dense relationship matrices of
+  GBLUP and ssGBLUP) whose sizes follow from neutral theory
+  (`ScenarioSize`) and whose multiples were fitted on 16 scenarios and
+  checked on 6 held out: every scenario's mean peak within 15 %, no run
+  above the bound. Calibrated on one host (AMD Threadripper 3970X, Julia
+  1.13.4, 8 threads); the measurements and the fit are in
+  `validation/estimate/`. Docs page "Resource estimate".
+- `bngsim run --memory-limit SIZE` refuses a scenario whose memory bound
+  exceeds `SIZE` before it runs, with exit code 5 (`BUDGET_EXCEEDED`,
+  reserved until now).
+
 ## v0.14.0 (2026-11-20)
 
 ### New

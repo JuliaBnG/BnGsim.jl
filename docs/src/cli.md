@@ -6,7 +6,8 @@ exit codes are versioned (CLI interface 1) separately from the package.
 
 ```text
 bngsim validate SCENARIO.json
-bngsim run SCENARIO.json --out DIR [--replicates A:B]
+bngsim estimate SCENARIO.json
+bngsim run SCENARIO.json --out DIR [--replicates A:B] [--memory-limit SIZE]
 bngsim version [--json]
 ```
 
@@ -24,6 +25,8 @@ failure from both.
 - `validate` prints `{"status": "valid", "scenario_sha256", ...}`, or
   `{"status": "invalid", "errors": [...]}` with every problem of the
   scenario and its path.
+- `estimate` prints the expected peak memory, a conservative bound, the
+  disk written and a rough run time ([Resource estimate](estimate.md)).
 - `run` writes three files to `DIR`, which must not exist or must be
   empty (results are never overwritten):
   - `scenario.json`, the canonical scenario ([`scenario_json`](@ref));
@@ -35,7 +38,10 @@ failure from both.
     CPU, host and threads, the start and end times, and the SHA-256 of the
     other two files.
 
-  It then prints `{"status": "completed", "outputs": [...], ...}`.
+  It then prints `{"status": "completed", "outputs": [...], ...}`. With
+  `--memory-limit SIZE` (bytes, or a number with `K`, `M`, `G` or `T`),
+  a scenario whose memory bound exceeds `SIZE` is refused before it
+  runs.
 - `version --json` prints the versions and the manifest hash.
 
 `scenario.json` and `summary.csv` depend only on the scenario, the
@@ -51,13 +57,13 @@ threads. Everything about the run itself is in `provenance.json`.
 | 2 | usage: unknown command, missing or invalid arguments |
 | 3 | the scenario is missing, unreadable or does not validate |
 | 4 | refused before running: the output directory is not empty, or the replicates are outside the scenario's |
-| 5 | reserved: a resource budget was exceeded |
+| 5 | refused before running: the memory bound exceeds `--memory-limit` |
 | 6 | the simulation stopped with an explicit error, e.g. fewer segregating loci than the panels ask for |
 | 7 | reserved: cancelled at a checkpoint |
 | 70 | internal error (a bug) |
 
-Codes 5 and 7 belong to `estimate` and `resume`, which come later
-([`ExitCode`](@ref)). A run that fails writes no output directory.
+Code 7 belongs to `resume`, which comes later ([`ExitCode`](@ref)). A run
+that fails or is refused writes no output directory.
 
 ## Start-up time
 

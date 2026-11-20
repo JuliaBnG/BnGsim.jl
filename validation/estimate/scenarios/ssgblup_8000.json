@@ -1,0 +1,6 @@
+{"schema": "bngsim-scenario", "schema_version": 1, "name": "ssgblup_8000", "seed": 1, "steps": 5,
+ "species": {"name": "toy", "chromosome": [50000000, 50000000]},
+ "founders": {"ne": 1000, "nt": 1000, "mr": 1.0, "nid": 1000},
+ "loci": {"qtl": {"nlc": 200, "maf": 0.01}, "chip": {"nlc": 5000, "maf": 0.01}},
+ "traits": [{"name": "y", "h2": 0.3}],
+ "scheme": {"noff": 1400, "nsire": 50, "ndam": 150, "evaluation": "ssgblup", "retain": "all"}}

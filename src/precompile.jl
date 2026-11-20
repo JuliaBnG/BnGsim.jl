@@ -17,6 +17,7 @@
             path = joinpath(dir, "$ev.json")
             write(path, doc(ev))
             cli(["validate", path]; stdout=devnull, stderr=devnull)
+            cli(["estimate", path]; stdout=devnull, stderr=devnull)
             cli(["run", path, "--out", joinpath(dir, ev)]; stdout=devnull, stderr=devnull)
         end
         cli(["version", "--json"]; stdout=devnull, stderr=devnull)
