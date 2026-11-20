@@ -1,0 +1,10 @@
+#!/usr/bin/env bash
+# The BnGsim command line. Runs `BnGsim.cli` in the Julia environment given
+# by BNGSIM_PROJECT (default: the environment of this checkout) with
+# BNGSIM_THREADS threads (default: auto). See `bngsim --help` and the
+# exit codes in the BnGsim documentation (ExitCode).
+set -euo pipefail
+here="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+exec "${JULIA:-julia}" --startup-file=no --project="${BNGSIM_PROJECT:-$here}" \
+    --threads="${BNGSIM_THREADS:-auto}" \
+    -e 'using BnGsim; exit(BnGsim.cli(ARGS))' -- "$@"

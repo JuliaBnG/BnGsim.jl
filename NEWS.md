@@ -1,5 +1,25 @@
 # BnGsim.jl release notes
 
+## v0.14.0 (2026-11-20)
+
+### New
+
+- Command line: `bin/bngsim validate | run | version` (CLI interface 1),
+  calling `BnGsim.cli(args)`. One JSON object goes to stdout and
+  diagnostics to stderr; exit codes are enumerated (`ExitCode`: 0 success,
+  2 usage, 3 invalid scenario, 4 refused, 6 simulation failed, 70 internal
+  error; 5 and 7 reserved). `run SCENARIO.json --out DIR` writes the
+  canonical `scenario.json`, `summary.csv` (the summaries of every
+  replicate, byte-identical at any number of threads) and
+  `provenance.json` (the scenario and its SHA-256, versions, manifest
+  hash, host, CPU, threads, times and the SHA-256 of the outputs), and
+  never overwrites a non-empty directory. Docs page "Command line".
+- A precompile workload compiles the scenario and command-line paths into
+  the package image: a cold `bngsim run examples/minimal.json` takes about
+  3 s instead of about 35 s; precompiling BnGsim takes about half a
+  minute longer.
+- New dependencies: SHA (standard library) and PrecompileTools.
+
 ## v0.13.0 (2026-11-20)
 
 ### New
