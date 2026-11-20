@@ -991,10 +991,15 @@ function simulate!(pop::Population, sc::Scheme, mm::MeiosisMap, nstep::Integer; 
         checkpoint === nothing || save_checkpoint(checkpoint, pop)
         r
     end
+    return DataFrame([rows; _final_row(pop, sc, mm)])
+end
+
+# The summary of the last cohort, which closes the table of `simulate!`
+# (no selection took place in it).
+function _final_row(pop::Population, sc::Scheme, mm::MeiosisMap)
     segs = sc.record_meiosis ? founder_segments(pop, mm) : nothing
-    last = merge(generation_summary(pop, current_step(pop); weights = index_weights(pop, sc), segs = segs),
+    return merge(generation_summary(pop, current_step(pop); weights = index_weights(pop, sc), segs = segs),
         _no_accuracy(pop), (nsire = 0, ndam = 0, L = NaN), _vc(pop), _no_ocs(sc))
-    return DataFrame([rows; last])
 end
 
 # ---- checkpoints -------------------------------------------------------

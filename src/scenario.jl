@@ -597,6 +597,14 @@ the number of threads.
 """
 function run_replicate(s::Scenario, r::Integer=1; history=nothing)
     r >= 1 || throw(ArgumentError("replicates are numbered from 1"))
+    rep = _setup_replicate(s, r, history)
+    summary = simulate!(rep.population, rep.scheme, rep.meiosis, s.steps)
+    return (; population=rep.population, summary, species=rep.species, map=rep.map, qtl=rep.qtl, chip=rep.chip)
+end
+
+# Replicate `r` of `s` before its first step: the founders, loci and traits,
+# the scheme and the meiosis map.
+function _setup_replicate(s::Scenario, r::Integer, history)
     sp = _species_of(s)
     h = history !== nothing ? history : _history(s, sp, s.founders.shared_history ? 0 : r)
     key = SimKey(s.seed; replicate=r)
@@ -617,9 +625,8 @@ function run_replicate(s::Scenario, r::Integer=1; history=nothing)
     end
     chip = s.chip === nothing ? Int32[] : Int32.(panels[2].loci)
     sc = Scheme(; s.scheme..., chip=chip)
-    mm = MeiosisMap(sp, vm)
-    summary = simulate!(pop, sc, mm, s.steps)
-    return (; population=pop, summary, species=sp, map=vm, qtl=Int32.(panels[1].loci), chip)
+    return (; population=pop, scheme=sc, meiosis=MeiosisMap(sp, vm), species=sp, map=vm,
+        qtl=Int32.(panels[1].loci), chip)
 end
 
 """

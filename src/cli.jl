@@ -19,10 +19,9 @@ The exit codes of the `bngsim` command line. They are part of its interface
 | 4 | `REJECTED` | refused before running: the output directory exists and is not empty |
 | 5 | `BUDGET_EXCEEDED` | refused before running: the memory bound of `resource_estimate` exceeds `--memory-limit` |
 | 6 | `SIMULATION_FAILED` | the simulation stopped with an explicit error (e.g. too few loci pass a `maf` filter) |
-| 7 | `CANCELLED` | reserved: cancelled at a checkpoint |
+| 7 | `CANCELLED` | stopped at a step boundary by a file `DIR/CANCEL`; `bngsim resume DIR` continues |
 | 70 | `INTERNAL_ERROR` | an unexpected error (a bug) |
 
-Code 7 is reserved for `resume`, which the CLI does not have yet.
 """
 module ExitCode
 const OK = 0
@@ -38,10 +37,13 @@ end
 const _CLI_USAGE = """
 usage: bngsim validate SCENARIO.json
        bngsim estimate SCENARIO.json
-       bngsim run SCENARIO.json --out DIR [--replicates A:B] [--memory-limit SIZE]
+       bngsim run SCENARIO.json --out DIR [--replicates A:B] [--memory-limit SIZE] [--checkpoint-every K]
+       bngsim resume DIR
        bngsim version [--json]
 
 SIZE is bytes, or a number with K, M, G or T (powers of 1024), e.g. 16G.
+A file DIR/CANCEL stops a run at the next step boundary (exit code 7);
+`bngsim resume DIR` continues it.
 
 Writes one JSON object to stdout and diagnostics to stderr; see the exit
 codes in the BnGsim documentation (ExitCode)."""
@@ -114,7 +116,16 @@ code ([`ExitCode`](@ref)). `bin/bngsim` calls it as
   scenario), `summary.csv` (the per-step summaries of every replicate) and
   `provenance.json`. Prints `{"status": "completed", "outputs": ...}`.
   With `--memory-limit`, a scenario whose memory bound exceeds `SIZE` is
-  refused before it runs (exit code 5).
+  refused before it runs (exit code 5). While it runs, the state lives in
+  `DIR/.bngsim-run/`; a file `DIR/CANCEL` stops it after the current
+  time step, with the state saved (exit code 7), and with
+  `--checkpoint-every K` the state is also saved every `K` steps, so that
+  a killed process can be resumed.
+- `resume DIR`: continue a stopped or killed run from its last saved
+  state (removing `DIR/CANCEL`). The outputs are those of an
+  uninterrupted run, byte for byte; `provenance.json` lists every session.
+  The state must come from the same BnGsim and Julia versions (exit code
+  4 otherwise).
 - `version [--json]`: the BnGsim version, the CLI interface and scenario
   schema versions, the Julia and package versions and the hash of the
   active manifest.
@@ -132,6 +143,7 @@ function cli(args::AbstractVector{<:AbstractString}; stdout::IO=Base.stdout, std
         cmd == "validate" && return _cli_validate(rest, stdout, stderr)
         cmd == "run" && return _cli_run(rest, stdout, stderr)
         cmd == "estimate" && return _cli_estimate(rest, stdout, stderr)
+        cmd == "resume" && return _cli_resume(rest, stdout, stderr)
         cmd == "version" && return _cli_version(rest, stdout, stderr)
         cmd in ("-h", "--help", "help") && (println(stdout, _CLI_USAGE); return ExitCode.OK)
         return _usage(stderr, "unknown command \"$cmd\"")
@@ -196,15 +208,19 @@ function _cli_version(args, stdout, stderr)
 end
 
 function _parse_run_args(args)
-    scen, out, reps, limit = nothing, nothing, nothing, nothing
+    scen, out, reps, limit, every = nothing, nothing, nothing, nothing, 0
     i = 1
     while i <= length(args)
         a = args[i]
-        if a == "--out" || a == "--replicates" || a == "--memory-limit"
+        if a in ("--out", "--replicates", "--memory-limit", "--checkpoint-every")
             i < length(args) || return "$a needs a value"
             v = args[i+1]
             if a == "--out"
                 out = v
+            elseif a == "--checkpoint-every"
+                k = tryparse(Int, v)
+                (k === nothing || k < 1) && return "--checkpoint-every takes a positive number of steps"
+                every = k
             elseif a == "--memory-limit"
                 limit = _parse_size(v)
                 limit === nothing && return "--memory-limit takes bytes or a number with K, M, G or T, e.g. 16G"
@@ -226,28 +242,24 @@ function _parse_run_args(args)
     end
     scen === nothing && return "run needs a scenario file"
     out === nothing && return "run needs --out DIR"
-    return (scen, out, reps, limit)
+    return (scen, out, reps, limit, every)
 end
 
 function _cli_run(args, stdout, stderr)
     O = JSON.Object{String,Any}
     p = _parse_run_args(args)
     p isa String && return _usage(stderr, p)
-    path, out, reps, limit = p
+    path, out, reps, limit, every = p
     s = _load(path, stdout, stderr)
     s isa Integer && return s
     reps = something(reps, 1:s.replicates)
     if isempty(reps) || first(reps) < 1 || last(reps) > s.replicates
-        msg = "--replicates $(first(reps)):$(last(reps)) is outside 1:$(s.replicates)"
-        println(stderr, "bngsim: ", msg)
-        _emit(stdout, O("status" => "rejected", "message" => msg))
-        return ExitCode.REJECTED
+        return _reject(stdout, stderr, "--replicates $(first(reps)):$(last(reps)) is outside 1:$(s.replicates)")
     end
-    if ispath(out) && !(isdir(out) && isempty(readdir(out)))
-        msg = "output directory $out exists and is not empty; results are never overwritten"
-        println(stderr, "bngsim: ", msg)
-        _emit(stdout, O("status" => "rejected", "message" => msg))
-        return ExitCode.REJECTED
+    if isdir(_state_dir(out))
+        return _reject(stdout, stderr, "$out holds an unfinished run; continue it with `bngsim resume $out`")
+    elseif ispath(out) && !(isdir(out) && isempty(readdir(out)))
+        return _reject(stdout, stderr, "output directory $out exists and is not empty; results are never overwritten")
     end
     if limit !== nothing
         e = resource_estimate(s)
@@ -260,33 +272,91 @@ function _cli_run(args, stdout, stderr)
             return ExitCode.BUDGET_EXCEEDED
         end
     end
-    j = scenario_json(s)
+    created = !ispath(out)
+    mkpath(_state_dir(out))
+    run = (scenario=scenario_json(s), replicates=collect(reps), checkpoint_every=every, sessions=Any[])
+    _save_state(joinpath(_state_dir(out), "run.jls"), run)
+    return _drive(out, s, run, stdout, stderr; created)
+end
+
+_reject(stdout, stderr, msg) = (println(stderr, "bngsim: ", msg);
+    _emit(stdout, JSON.Object{String,Any}("status" => "rejected", "message" => msg)); ExitCode.REJECTED)
+
+function _cli_resume(args, stdout, stderr)
+    O = JSON.Object{String,Any}
+    length(args) == 1 || return _usage(stderr, "resume takes one run directory")
+    out = args[1]
+    p = joinpath(_state_dir(out), "run.jls")
+    isfile(p) || return _reject(stdout, stderr, "$out holds no unfinished run")
+    run = try
+        _load_state(p)
+    catch e
+        e isa ArgumentError || rethrow()
+        return _reject(stdout, stderr, e.msg)
+    end
+    s = parse_scenario(run.scenario)
+    # The request to stop has been served; resuming withdraws it.
+    rm(joinpath(out, "CANCEL"); force=true)
+    return _drive(out, s, run, stdout, stderr; created=false)
+end
+
+# A request to stop the run in `out` at the next step boundary.
+_cancel_requested(out) = isfile(joinpath(out, "CANCEL"))
+
+# Run (or continue) the run in `out` and finish it: write the outputs, or
+# the state and exit code 7 when stopped.
+function _drive(out, s, run, stdout, stderr; created, should_stop=(r, g) -> _cancel_requested(out))
+    O = JSON.Object{String,Any}
+    st = _state_dir(out)
+    reps = run.replicates
     started = now(UTC)
-    t = @elapsed df = try
-        run_scenario(s; replicates=reps)
+    t0 = time()
+    result = try
+        _execute(out, s, reps; checkpoint_every=run.checkpoint_every, should_stop=should_stop)
     catch e
         e isa ArgumentError || e isa DimensionMismatch || e isa ErrorException || rethrow()
         msg = sprint(showerror, e)
         println(stderr, "bngsim: the simulation stopped: ", msg)
         _emit(stdout, O("status" => "failed", "message" => msg))
+        # A run that never saved state leaves nothing; one with a checkpoint
+        # keeps it, for inspection or another `resume`.
+        if isempty(run.sessions) && !isfile(joinpath(st, "current.jls")) && !isfile(joinpath(st, "done.jls"))
+            created ? rm(out; recursive=true) : rm(st; recursive=true)
+        end
         return ExitCode.SIMULATION_FAILED
     end
-    finished = now(UTC)
-    mkpath(out)
+    session = O("started" => string(started, "Z"), "finished" => string(now(UTC), "Z"),
+        "seconds" => round(time() - t0; digits=3), "host" => gethostname(), "cpu" => Sys.cpu_info()[1].model,
+        "threads" => Threads.nthreads(), "status" => result[1] === :cancelled ? "cancelled" : "completed")
+    sessions = [run.sessions; session]
+    j = run.scenario
+    if result[1] === :cancelled
+        _, r, g = result
+        _save_state(joinpath(st, "run.jls"), merge(run, (sessions=sessions,)))
+        println(stderr, "bngsim: stopped after step $g of replicate $r; continue with `bngsim resume $out`")
+        _emit(stdout, O("status" => "cancelled", "replicate" => r, "step" => g, "directory" => out))
+        return ExitCode.CANCELLED
+    end
+    df = result[2]
     files = ["scenario.json", "summary.csv"]
     write(joinpath(out, "scenario.json"), j)
     open(io -> _write_csv(io, df), joinpath(out, "summary.csv"), "w")
     hashes = O(f => _sha256_file(joinpath(out, f)) for f in files)
+    seconds = round(sum(x -> x["seconds"], sessions); digits=3)
     prov = O("bngsim" => string(pkgversion(BnGsim)), "cli_interface" => CLI_INTERFACE_VERSION,
         "scenario_schema" => SCENARIO_SCHEMA_VERSION, "scenario_sha256" => _sha256(j),
-        "scenario" => scenario_dict(s), "seed" => s.seed, "replicates" => collect(reps),
+        "scenario" => scenario_dict(s), "seed" => s.seed, "replicates" => reps,
         "julia" => string(VERSION), "packages" => _package_versions(), "manifest_sha256" => _manifest_sha256(),
         "os" => string(Sys.KERNEL, " ", Sys.MACHINE), "cpu" => Sys.cpu_info()[1].model, "host" => gethostname(),
-        "threads" => Threads.nthreads(), "started" => string(started, "Z"), "finished" => string(finished, "Z"),
-        "seconds" => round(t; digits=3), "outputs" => hashes)
+        "threads" => Threads.nthreads(), "started" => sessions[1]["started"], "finished" => session["finished"],
+        "seconds" => seconds, "checkpoint_every" => run.checkpoint_every, "sessions" => sessions,
+        "outputs" => hashes)
     open(io -> _emit(io, prov), joinpath(out, "provenance.json"), "w")
-    _emit(stdout, O("status" => "completed", "scenario_sha256" => _sha256(j), "replicates" => collect(reps),
-        "outputs" => [joinpath(out, f) for f in [files; "provenance.json"]], "seconds" => round(t; digits=3)))
+    rm(st; recursive=true)
+    rm(joinpath(out, "CANCEL"); force=true)
+    _emit(stdout, O("status" => "completed", "scenario_sha256" => _sha256(j), "replicates" => reps,
+        "outputs" => [joinpath(out, f) for f in [files; "provenance.json"]], "seconds" => seconds,
+        "sessions" => length(sessions)))
     return ExitCode.OK
 end
 

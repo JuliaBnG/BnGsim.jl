@@ -32,6 +32,7 @@ include("retention.jl")
 include("scenario.jl")
 include("cli.jl")
 include("estimate.jl")
+include("resume.jl")
 
 @testset "Aqua" begin
     Aqua.test_all(BnGsim)

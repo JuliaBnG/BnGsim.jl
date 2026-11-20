@@ -31,6 +31,7 @@ include("historical.jl")
 include("founder-summary.jl")
 include("scenario.jl")
 include("estimate.jl")
+include("runner.jl")
 include("cli.jl")
 
 export sum_map, sumMap, crossovers, gamete!, gene_drop, gene_drop!
