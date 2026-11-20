@@ -7,7 +7,8 @@ exit codes are versioned (CLI interface 1) separately from the package.
 ```text
 bngsim validate SCENARIO.json
 bngsim estimate SCENARIO.json
-bngsim run SCENARIO.json --out DIR [--replicates A:B] [--memory-limit SIZE]
+bngsim run SCENARIO.json --out DIR [--replicates A:B] [--memory-limit SIZE] [--checkpoint-every K]
+bngsim resume DIR
 bngsim version [--json]
 ```
 
@@ -42,12 +43,33 @@ failure from both.
   `--memory-limit SIZE` (bytes, or a number with `K`, `M`, `G` or `T`),
   a scenario whose memory bound exceeds `SIZE` is refused before it
   runs.
+- `resume DIR` continues a run that was stopped or killed (below).
 - `version --json` prints the versions and the manifest hash.
 
 `scenario.json` and `summary.csv` depend only on the scenario, the
 replicates and the package versions. They are byte-identical whatever
 the number of threads: for `examples/minimal.json`, checked at 1 and 8
 threads. Everything about the run itself is in `provenance.json`.
+
+## Stopping and resuming
+
+While a run is unfinished its state lives in `DIR/.bngsim-run/`: the
+scenario, the shared historical population, the summaries of the
+replicates done, and a checkpoint of the one in progress. A file
+`DIR/CANCEL` (created by a user or the service) stops the run after the
+current time step: the state is saved and `bngsim` exits with code 7.
+`bngsim resume DIR` removes `DIR/CANCEL` and continues. With
+`--checkpoint-every K` the state is also saved every `K` steps, so that a
+process that is killed, or a host that goes down, loses at most `K` steps.
+
+A resumed run gives the same `scenario.json` and `summary.csv`, byte for
+byte, as one that was never interrupted, since every random draw is keyed
+by its coordinate (replicate, step, animal) and nothing else carries over
+between steps. `provenance.json` lists each session (start, end, host,
+CPU, threads, and whether it was stopped or completed). `run` refuses a
+directory that holds an unfinished run. The state uses Julia's
+serialization, so it resumes only under the same BnGsim and Julia
+versions; it is for continuing a run, not for archiving.
 
 ## Exit codes
 
@@ -56,14 +78,14 @@ threads. Everything about the run itself is in `provenance.json`.
 | 0 | success |
 | 2 | usage: unknown command, missing or invalid arguments |
 | 3 | the scenario is missing, unreadable or does not validate |
-| 4 | refused before running: the output directory is not empty, or the replicates are outside the scenario's |
+| 4 | refused: the output directory is not empty or holds an unfinished run, the replicates are outside the scenario's, or there is nothing to resume (or its state is from another version) |
 | 5 | refused before running: the memory bound exceeds `--memory-limit` |
 | 6 | the simulation stopped with an explicit error, e.g. fewer segregating loci than the panels ask for |
-| 7 | reserved: cancelled at a checkpoint |
+| 7 | stopped at a step boundary by `DIR/CANCEL`; `bngsim resume DIR` continues |
 | 70 | internal error (a bug) |
 
-Code 7 belongs to `resume`, which comes later ([`ExitCode`](@ref)). A run
-that fails or is refused writes no output directory.
+A run that fails before it saved any state, or is refused, writes no
+output directory ([`ExitCode`](@ref)).
 
 ## Start-up time
 

@@ -1,5 +1,19 @@
 # BnGsim.jl release notes
 
+## v0.16.0 (2026-11-20)
+
+### New
+
+- Stopping and resuming runs. While `bngsim run` is unfinished its state
+  lives in `DIR/.bngsim-run/`. A file `DIR/CANCEL` stops it after the
+  current time step with the state saved (exit code 7, `CANCELLED`,
+  reserved until now); `--checkpoint-every K` also saves it every `K`
+  steps, so a killed process loses at most `K` steps. `bngsim resume DIR`
+  continues the run: its `scenario.json` and `summary.csv` are
+  byte-identical to an uninterrupted run, and `provenance.json` lists
+  every session. `run` refuses a directory holding an unfinished run.
+  The state resumes only under the same BnGsim and Julia versions.
+
 ## v0.15.0 (2026-11-20)
 
 ### New
