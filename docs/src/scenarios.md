@@ -3,9 +3,9 @@
 A scenario is a JSON file that describes a whole simulation: the species,
 the historical population and the founders sampled from it, the QTL and
 chip loci, the traits, the breeding scheme, the number of time steps, the
-master seed and the number of replicates. It is the input of the planned
-`bngsim` command line and web service, and runs in Julia with
-[`run_scenario`](@ref).
+master seed and the number of replicates. It is the input of the `bngsim`
+[command line](cli.md) and of the planned web service, and runs in Julia
+with [`run_scenario`](@ref).
 
 ```julia
 using BnGsim
@@ -83,5 +83,5 @@ with others, and on any number of threads.
   takes no file paths (the service accepts no user paths, roadmap I9).
 - Traits are additive (as the breeding loop).
 - One scheme for the whole run.
-- The scenario records no provenance yet; the command line will write it
-  with the outputs (roadmap I2).
+- Provenance is written by the [command line](cli.md) with the outputs
+  (roadmap I2), not by `run_scenario`.

@@ -18,6 +18,7 @@ makedocs(
     pages = [
         "Home" => "index.md",
         "Scenarios" => "scenarios.md",
+        "Command line" => "cli.md",
         "Relationships: A, G and IBD" => "relationships.md",
         "API Reference" => "api.md",
         "Roadmap" => "roadmap.md",

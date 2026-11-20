@@ -30,6 +30,7 @@ include("ibd.jl")
 include("pedigree-view.jl")
 include("retention.jl")
 include("scenario.jl")
+include("cli.jl")
 
 @testset "Aqua" begin
     Aqua.test_all(BnGsim)
