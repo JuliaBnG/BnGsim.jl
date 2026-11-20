@@ -8,6 +8,7 @@ exit codes are versioned (CLI interface 1) separately from the package.
 bngsim validate SCENARIO.json
 bngsim estimate SCENARIO.json
 bngsim run SCENARIO.json --out DIR [--replicates A:B] [--memory-limit SIZE] [--checkpoint-every K]
+           [--archive none|chip|qtl|all]
 bngsim resume DIR
 bngsim version [--json]
 ```
@@ -43,6 +44,9 @@ failure from both.
   `--memory-limit SIZE` (bytes, or a number with `K`, `M`, `G` or `T`),
   a scenario whose memory bound exceeds `SIZE` is refused before it
   runs.
+- With `--archive PANEL`, `run` also writes an [archive](archive.md) of each
+  replicate (pedigree, records, true and estimated breeding values, QTL,
+  and PLINK genotypes at the loci of `PANEL`) to `DIR/archive/r<N>/`.
 - `resume DIR` continues a run that was stopped or killed (below).
 - `version --json` prints the versions and the manifest hash.
 

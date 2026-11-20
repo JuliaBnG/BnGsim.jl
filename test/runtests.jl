@@ -33,6 +33,7 @@ include("scenario.jl")
 include("cli.jl")
 include("estimate.jl")
 include("resume.jl")
+include("archive.jl")
 
 @testset "Aqua" begin
     Aqua.test_all(BnGsim)

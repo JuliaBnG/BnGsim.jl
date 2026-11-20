@@ -49,8 +49,11 @@ State files: `run.jls` (scenario JSON, replicates, options, the sessions
 of the run), `history.jls` (the shared historical population, once saved),
 `done.jls` (the summaries of finished replicates) and `current.jls` (the
 replicate in progress: its population, map, loci and the rows so far).
+`on_replicate(r, rep)` is called when replicate `r` has finished, with its
+population, map, loci and species (e.g. to write its archive).
 """
-function _execute(dir, s::Scenario, reps; checkpoint_every::Integer=0, should_stop=(r, g) -> false)
+function _execute(dir, s::Scenario, reps; checkpoint_every::Integer=0, should_stop=(r, g) -> false,
+    on_replicate=(r, rep) -> nothing)
     st = _state_dir(dir)
     p_hist, p_done, p_cur = joinpath(st, "history.jls"), joinpath(st, "done.jls"), joinpath(st, "current.jls")
     sp = _species_of(s)
@@ -73,8 +76,8 @@ function _execute(dir, s::Scenario, reps; checkpoint_every::Integer=0, should_st
         any(d -> d.first == r, done) && continue
         if cur !== nothing && cur.replicate == r
             sc = Scheme(; s.scheme..., chip=cur.chip)
-            rep = (; population=cur.population, scheme=sc, meiosis=MeiosisMap(sp, cur.map), map=cur.map,
-                qtl=cur.qtl, chip=cur.chip)
+            rep = (; population=cur.population, scheme=sc, meiosis=MeiosisMap(sp, cur.map), species=sp,
+                map=cur.map, qtl=cur.qtl, chip=cur.chip)
             g0, rows = cur.step, cur.rows
             cur = nothing
         else
@@ -89,6 +92,7 @@ function _execute(dir, s::Scenario, reps; checkpoint_every::Integer=0, should_st
             end
             checkpoint_every > 0 && g % checkpoint_every == 0 && g < s.steps && save!(r, g, rep, rows)
         end
+        on_replicate(r, rep)
         df = DataFrame([rows; _final_row(rep.population, rep.scheme, rep.meiosis)])
         insertcols!(df, 1, :replicate => fill(r, nrow(df)))
         push!(done, r => df)

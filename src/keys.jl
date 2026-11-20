@@ -23,6 +23,7 @@ const SURVIVAL = 0x0005
 const QTL = 0x0006
 const SELECTION = 0x0007
 const GENOTYPING = 0x0008
+const INFINITESIMAL = 0x0009
 end
 
 # Version of the key → stream layout. It is mixed into the Philox key, so

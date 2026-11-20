@@ -569,7 +569,21 @@ write_scenario(path::AbstractString, s::Scenario) = write(path, scenario_json(s)
 _species_of(s::Scenario) = GenericSpecies(s.species.name, s.species.chromosome; morgan=s.species.morgan)
 
 # Stages of the founder domain.
-const _STAGE_HISTORY, _STAGE_DECLINE, _STAGE_SAMPLE = 0x0001, 0x0002, 0x0003
+const _STAGE_HISTORY, _STAGE_DECLINE, _STAGE_SAMPLE, _STAGE_NUCLEOTIDES = 0x0001, 0x0002, 0x0003, 0x0004
+
+# Placeholder nucleotides (`ref` and a different `alt`) from `rng`. The map
+# of `founder_haplotypes` draws them from the global generator, so they
+# would differ between runs of the same scenario; nothing else depends on
+# them.
+function _nucleotides!(vm::VariantMap, rng::AbstractRNG)
+    bases = ('A', 'C', 'G', 'T')
+    for i in eachindex(vm.ref)
+        r = rand(rng, 1:4)
+        vm.ref[i] = bases[r]
+        vm.alt[i] = bases[mod1(r + rand(rng, 1:3), 4)]
+    end
+    return vm
+end
 
 # The historical population of replicate `r` (0: shared by all).
 function _history(s::Scenario, sp::Species, r::Integer)
@@ -612,6 +626,7 @@ function _setup_replicate(s::Scenario, r::Integer, history)
         rng=keyed_rng(SimKey(key; domain=Domain.FOUNDERS, stage=_STAGE_SAMPLE)))
     hap = Haplotype(xy)
     vm = _to_variant_map(lmp)
+    _nucleotides!(vm, keyed_rng(SimKey(key; domain=Domain.FOUNDERS, stage=_STAGE_NUCLEOTIDES)))
     sets = [SNPSet("qtl", s.qtl.nlc; maf=s.qtl.maf, exclusive=true)]
     s.chip === nothing || push!(sets, SNPSet("chip", s.chip.nlc; maf=s.chip.maf, exclusive=s.overlap === :disjoint))
     panels = sample_loci(hap, vm, sets...; rng=keyed_rng(SimKey(key; domain=Domain.GENOTYPING)))
