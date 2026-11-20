@@ -6,6 +6,7 @@ using LinearAlgebra
 using Mmap
 using Serialization
 using FisherWright
+using JSON
 using RelationshipMatrices
 using Breeding: Breeding, MME, mme, RandomEffect, solve_mme, incidence, TM1997, feasible, rocs, pev_candidates, reml,
     MultiTrait, mt_stack, mt_blocks, mt_rinv
@@ -26,6 +27,7 @@ include("base-populations.jl")
 include("provenance.jl")
 include("historical.jl")
 include("founder-summary.jl")
+include("scenario.jl")
 
 export sum_map, sumMap, crossovers, gamete!, gene_drop, gene_drop!
 export random_mate, rnd_ped, expand, sample_id, sampleID, sample_loci, sampleLoci
@@ -43,5 +45,7 @@ export save_checkpoint, load_checkpoint
 export HistoricalSpec, historical_population, continue_population, founder_haplotypes
 export read_packed_haplotypes, write_xy
 export ld_decay, vanraden_g, founder_summary
+export Scenario, ScenarioError, read_scenario, parse_scenario, validate_scenario, write_scenario, scenario_json,
+    scenario_dict, run_scenario, run_replicate
 
 end # module BnGsim
