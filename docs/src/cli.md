@@ -10,6 +10,7 @@ bngsim estimate SCENARIO.json
 bngsim run SCENARIO.json --out DIR [--replicates A:B] [--memory-limit SIZE] [--checkpoint-every K]
            [--archive none|chip|qtl|all]
 bngsim resume DIR
+bngsim merge DIR... --out DIR
 bngsim version [--json]
 ```
 
@@ -34,6 +35,10 @@ failure from both.
   - `scenario.json`, the canonical scenario ([`scenario_json`](@ref));
   - `summary.csv`, the per-step summaries of every replicate
     ([`run_scenario`](@ref)), numbers in Julia's shortest round-trip form;
+  - `aggregate.csv`, per time step over the replicates, the mean,
+    standard deviation and standard error of every summary, and of the
+    changes per step within each replicate (genetic gain `dG`, rate of
+    inbreeding `dF`) ([`aggregate`](@ref));
   - `provenance.json`: the canonical scenario and its SHA-256, the seed and
     replicates, the BnGsim, CLI and schema versions, the Julia and package
     versions, the SHA-256 of the active manifest, the operating system,
@@ -54,6 +59,18 @@ failure from both.
 replicates and the package versions. They are byte-identical whatever
 the number of threads: for `examples/minimal.json`, checked at 1 and 8
 threads. Everything about the run itself is in `provenance.json`.
+
+## Replicates on several hosts
+
+`bngsim run ... --replicates A:B` runs part of the replicates of a
+scenario, for example on several hosts, and `bngsim merge DIR... --out OUT`
+combines completed runs of the same scenario (the SHA-256 of their
+scenarios must agree) whose replicates do not overlap. `OUT` gets the
+scenario, the summaries ordered by replicate, the aggregate and a
+provenance that lists the runs merged. Since every replicate is keyed by
+its number, the merged `summary.csv` and `aggregate.csv` are byte for
+byte those of a single run of all the replicates, in whatever order the
+runs are merged or finished.
 
 ## Stopping and resuming
 

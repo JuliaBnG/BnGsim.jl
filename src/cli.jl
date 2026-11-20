@@ -40,6 +40,7 @@ usage: bngsim validate SCENARIO.json
        bngsim run SCENARIO.json --out DIR [--replicates A:B] [--memory-limit SIZE] [--checkpoint-every K]
                   [--archive none|chip|qtl|all]
        bngsim resume DIR
+       bngsim merge DIR... --out DIR
        bngsim version [--json]
 
 SIZE is bytes, or a number with K, M, G or T (powers of 1024), e.g. 16G.
@@ -126,6 +127,11 @@ code ([`ExitCode`](@ref)). `bin/bngsim` calls it as
   With `--archive none|chip|qtl|all`, an archive of each replicate
   ([`write_archive`](@ref)) is written to `DIR/archive/r<N>/` when it
   finishes, and listed in `provenance.json`.
+- `merge DIR... --out OUT`: combine completed runs of the same scenario with
+  disjoint replicates (e.g. split over hosts with `--replicates`) into
+  `OUT`: `scenario.json`, `summary.csv` (rows ordered by replicate, the
+  bytes of a single run of all of them), `aggregate.csv` and
+  `provenance.json` listing the runs merged.
 - `resume DIR`: continue a stopped or killed run from its last saved
   state (removing `DIR/CANCEL`). The outputs are those of an
   uninterrupted run, byte for byte; `provenance.json` lists every session.
@@ -149,6 +155,7 @@ function cli(args::AbstractVector{<:AbstractString}; stdout::IO=Base.stdout, std
         cmd == "run" && return _cli_run(rest, stdout, stderr)
         cmd == "estimate" && return _cli_estimate(rest, stdout, stderr)
         cmd == "resume" && return _cli_resume(rest, stdout, stderr)
+        cmd == "merge" && return _cli_merge(rest, stdout, stderr)
         cmd == "version" && return _cli_version(rest, stdout, stderr)
         cmd in ("-h", "--help", "help") && (println(stdout, _CLI_USAGE); return ExitCode.OK)
         return _usage(stderr, "unknown command \"$cmd\"")
@@ -350,9 +357,10 @@ function _drive(out, s, run, stdout, stderr; created, should_stop=(r, g) -> _can
         return ExitCode.CANCELLED
     end
     df = result[2]
-    files = ["scenario.json", "summary.csv"]
+    files = ["scenario.json", "summary.csv", "aggregate.csv"]
     write(joinpath(out, "scenario.json"), j)
     open(io -> _write_csv(io, df), joinpath(out, "summary.csv"), "w")
+    open(io -> _write_csv(io, aggregate(df)), joinpath(out, "aggregate.csv"), "w")
     hashes = O(f => _sha256_file(joinpath(out, f)) for f in files)
     seconds = round(sum(x -> x["seconds"], sessions); digits=3)
     prov = O("bngsim" => string(pkgversion(BnGsim)), "cli_interface" => CLI_INTERFACE_VERSION,
@@ -415,3 +423,57 @@ end
 _run_archive(run) = hasproperty(run, :archive) ? run.archive : nothing
 
 _files_under(dir) = isdir(dir) ? [joinpath(root, f) for (root, _, fs) in walkdir(dir) for f in fs] : String[]
+
+function _cli_merge(args, stdout, stderr)
+    O = JSON.Object{String,Any}
+    i = findfirst(==("--out"), args)
+    (i === nothing || i == length(args)) && return _usage(stderr, "merge needs --out DIR")
+    out = args[i+1]
+    dirs = [args[1:i-1]; args[i+2:end]]
+    length(dirs) >= 1 || return _usage(stderr, "merge needs the run directories to merge")
+    any(startswith("-"), dirs) && return _usage(stderr, "merge takes run directories and --out DIR")
+    ispath(out) && !(isdir(out) && isempty(readdir(out))) &&
+        return _reject(stdout, stderr, "output directory $out exists and is not empty; results are never overwritten")
+    provs, hdr = [], nothing
+    rows = Dict{Int,Vector{String}}()
+    for d in dirs
+        p = joinpath(d, "provenance.json")
+        (isfile(p) && isfile(joinpath(d, "summary.csv")) && !isdir(_state_dir(d))) ||
+            return _reject(stdout, stderr, "$d is not a completed run (provenance.json and summary.csv, no unfinished state)")
+        prov = JSON.parse(read(p, String))
+        push!(provs, (dir=d, prov=prov, sha=_sha256_file(p)))
+        lines = readlines(joinpath(d, "summary.csv"))
+        hdr === nothing ? (hdr = lines[1]) : hdr == lines[1] ||
+            return _reject(stdout, stderr, "$d has other summary columns than $(dirs[1])")
+        for l in lines[2:end]
+            r = parse(Int, split(l, ',')[1])
+            push!(get!(rows, r, String[]), l)
+        end
+    end
+    shas = unique(String(x.prov["scenario_sha256"]) for x in provs)
+    length(shas) == 1 || return _reject(stdout, stderr, "the runs are of different scenarios (scenario_sha256 differ)")
+    reps = [Int.(x.prov["replicates"]) for x in provs]
+    all_reps = reduce(vcat, reps)
+    allunique(all_reps) || return _reject(stdout, stderr, "the runs share replicates; merge needs disjoint ones")
+    mkpath(out)
+    cp(joinpath(dirs[1], "scenario.json"), joinpath(out, "scenario.json"))
+    open(joinpath(out, "summary.csv"), "w") do io
+        println(io, hdr)
+        for r in sort(collect(keys(rows))), l in rows[r]
+            println(io, l)
+        end
+    end
+    df = _read_summary(joinpath(out, "summary.csv"))
+    open(io -> _write_csv(io, aggregate(df)), joinpath(out, "aggregate.csv"), "w")
+    files = ["scenario.json", "summary.csv", "aggregate.csv"]
+    hashes = O(f => _sha256_file(joinpath(out, f)) for f in files)
+    prov = O("bngsim" => string(pkgversion(BnGsim)), "cli_interface" => CLI_INTERFACE_VERSION,
+        "scenario_sha256" => shas[1], "replicates" => sort(all_reps), "merged" => string(now(UTC), "Z"),
+        "host" => gethostname(), "julia" => string(VERSION),
+        "sources" => [O("directory" => abspath(x.dir), "provenance_sha256" => x.sha, "replicates" => r,
+            "bngsim" => x.prov["bngsim"]) for (x, r) in zip(provs, reps)], "outputs" => hashes)
+    open(io -> _emit(io, prov), joinpath(out, "provenance.json"), "w")
+    _emit(stdout, O("status" => "merged", "scenario_sha256" => shas[1], "replicates" => sort(all_reps),
+        "outputs" => [joinpath(out, f) for f in [files; "provenance.json"]]))
+    return ExitCode.OK
+end
