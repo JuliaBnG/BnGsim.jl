@@ -19,7 +19,7 @@ The exit codes of the `bngsim` command line. They are part of its interface
 | 4 | `REJECTED` | refused before running: the output directory exists and is not empty |
 | 5 | `BUDGET_EXCEEDED` | refused before running: the memory bound of `resource_estimate` exceeds `--memory-limit` |
 | 6 | `SIMULATION_FAILED` | the simulation stopped with an explicit error (e.g. too few loci pass a `maf` filter) |
-| 7 | `CANCELLED` | stopped at a step boundary by a file `DIR/CANCEL`; `bngsim resume DIR` continues |
+| 7 | `CANCELLED` | stopped at a step boundary by a file `DIR/CANCEL` (which `bin/bngsim` creates on SIGINT or SIGTERM); `bngsim resume DIR` continues |
 | 70 | `INTERNAL_ERROR` | an unexpected error (a bug) |
 
 """
