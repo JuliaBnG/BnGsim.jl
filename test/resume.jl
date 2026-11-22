@@ -29,7 +29,7 @@
     touch(joinpath(a, "CANCEL"))                      # served by the stop; resuming withdraws it
     code, v, _ = run_cli("resume", a)
     @test code == 0 && v["sessions"] == 2
-    @test sort(readdir(a)) == ["provenance.json", "scenario.json", "summary.csv"]
+    @test sort(readdir(a)) == ["aggregate.csv", "provenance.json", "scenario.json", "summary.csv"]
     @test read(joinpath(a, "summary.csv")) == read(joinpath(ref, "summary.csv"))
     @test read(joinpath(a, "scenario.json")) == read(joinpath(ref, "scenario.json"))
     p = JSON.parse(read(joinpath(a, "provenance.json"), String))

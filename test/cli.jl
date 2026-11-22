@@ -51,7 +51,7 @@ Base.write(::ClosedPipe, ::UInt8) = throw(Base.IOError("write: broken pipe", Bas
     out = joinpath(dir, "out")
     code, v, _ = run_cli("run", MINIMAL, "--out", out)
     @test code == 0 && v["status"] == "completed" && v["replicates"] == [1]
-    @test sort(readdir(out)) == ["provenance.json", "scenario.json", "summary.csv"]
+    @test sort(readdir(out)) == ["aggregate.csv", "provenance.json", "scenario.json", "summary.csv"]
     @test read_scenario(joinpath(out, "scenario.json")) == read_scenario(MINIMAL)
     lines = readlines(joinpath(out, "summary.csv"))
     df = run_scenario(read_scenario(MINIMAL))

@@ -1,5 +1,21 @@
 # BnGsim.jl release notes
 
+## v0.19.0 (2026-11-20)
+
+### New
+
+- `aggregate(summary)` and `aggregate.csv`, written by every `bngsim run`:
+  per time step, over the replicates, the mean, standard deviation and
+  standard error of every summary column, and of the changes per step
+  within each replicate (`dG` for the genetic means, `dF` for the rate of
+  inbreeding). Rows are sorted by replicate first, so the result does not
+  depend on their order.
+- `bngsim merge DIR... --out DIR`: combine completed runs of the same
+  scenario with disjoint replicates (e.g. `--replicates` on several
+  hosts). The merged `summary.csv` and `aggregate.csv` are byte-identical
+  to a single run of all the replicates, in whatever order the runs are
+  given; `provenance.json` lists the runs merged.
+
 ## v0.18.0 (2026-11-20)
 
 ### New
