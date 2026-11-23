@@ -1,5 +1,42 @@
 # BnGsim.jl release notes
 
+## v0.34.0 (2026-11-23)
+
+The Julia API toward 1.0 (package roadmap §11, decisions a and c).
+
+### Breaking
+
+- The building blocks of 0.1–0.3 moved to the submodule `BnGsim.Legacy`
+  and are no longer exported by `BnGsim`: `sum_map`, `gamete!`,
+  `gene_drop!`, `random_mate`, `rnd_ped`, `expand`, `sample_id`,
+  `norm_mv!`, `tbv!`, `phenotype!`, `dummy_traits`, `FounderPopulation`,
+  `sample_founder_population`, `HistoricalSpec`, `historical_population`,
+  `continue_population`, `read_packed_haplotypes`, `write_xy`,
+  `vanraden_g` and the text header `provenance`. They draw from an
+  explicit or the global generator, outside the keyed streams, and are
+  outside the 1.0 promise. Add `using BnGsim.Legacy`; their behaviour is
+  unchanged. The old sampler `crossovers(sp, vm; rng)` stays a method of
+  `BnGsim.crossovers`, defined in `Legacy`.
+- Removed the aliases deprecated since 0.2: `sumMap`, `sampleID`,
+  `sampleLoci`, and `gene_drop(pg, og, …)` (use `gene_drop!(og, pg, …)`).
+- The fields of `Population` are internal and may change in any release;
+  read a population through the accessors below.
+
+### New
+
+- Accessors of `Population`: `tbv`, `ebv`, `phenotypes` (`n × k`
+  matrices, optionally for a subset of ids), `records` (every record made
+  by a time step: `id, trait, step, value`, also for single-record
+  traits), `traits`, `trait_qtl`, `covariances` (`G`, `R`, `PE` of the
+  next evaluation) and `parity`, beside the existing `pedigree`,
+  `genomes`, `retained`, `alive`, `observed`, `recorded`, `meioses`.
+  `tbv` extends `BnGStructs.tbv`.
+- The documentation's home page and the README describe the scenario
+  workflow; the API reference lists `BnGsim.Legacy` separately.
+
+Results are unchanged: no draw or computation of the loop, the
+scenarios or the command line changed.
+
 ## v0.33.0 (2026-11-23)
 
 Hardening release.

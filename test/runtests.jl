@@ -1,6 +1,7 @@
 using Test
 using Aqua
 using BnGsim
+using BnGsim.Legacy
 using BnGStructs
 using Distributions
 using DataFrames
@@ -47,6 +48,7 @@ include("history.jl")
 include("histories.jl")
 include("meiosis-models.jl")
 include("reproduction.jl")
+include("accessors.jl")
 include("examples.jl")
 include("signals.jl")
 

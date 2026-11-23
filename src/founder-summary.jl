@@ -100,24 +100,6 @@ function ld_decay(
 end
 
 """
-    vanraden_g(xy, loci) -> Matrix{Float64}
-
-VanRaden (2008) method-1 genomic relationships among the individuals of `xy`
-(columns `2i-1`, `2i`) at `loci`, centred on the allele frequencies of the
-same individuals: `G = ZZ' / 2Σpq`. Computed by `RelationshipMatrices.grm`.
-"""
-function vanraden_g(xy::AbstractMatrix{Bool}, loci::AbstractVector{<:Integer})
-    nid = size(xy, 2) ÷ 2
-    Z = Matrix{Int8}(undef, length(loci), nid)
-    Threads.@threads for i = 1:nid
-        @inbounds for (k, l) in enumerate(loci)
-            Z[k, i] = Int8(xy[l, 2i-1]) + Int8(xy[l, 2i])
-        end
-    end
-    return grm(Z)
-end
-
-"""
     founder_summary(xy, lmp; nchip = 20_000, chip_maf = 0.2, nqtl = 10_000, qtl_maf = 0.0,
                     presample = 3, rare = 0.05, ld = (;), rng = Random.default_rng())
         -> (scalars::NamedTuple, sfs::DataFrame, ld::DataFrame, chip, qtl)

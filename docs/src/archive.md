@@ -42,6 +42,6 @@ of computation. The test suite checks the covariances against
 ```julia
 using BnGsim
 r = run_replicate(read_scenario("examples/minimal.json"))
-pop = r.population
-u, y = infinitesimal(pop.sire, pop.dam, [1.0;;], [3.0;;], SimKey(1))
+ped = pedigree(r.population)
+u, y = infinitesimal(ped.sire, ped.dam, [1.0;;], [3.0;;], SimKey(1))
 ```

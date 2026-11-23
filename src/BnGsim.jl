@@ -26,15 +26,13 @@ import .RelationshipsAdapter: founder_segments
 using .BreedingAdapter
 
 include("keys.jl")
-include("reproduction.jl")
+include("loci.jl")
 include("meiosis.jl")
 include("pedigree-view.jl")
 include("loop.jl")
 include("mating.jl")
 include("ocs.jl")
 include("traits.jl")
-include("base-populations.jl")
-include("provenance.jl")
 include("historical.jl")
 include("founder-summary.jl")
 include("scenario.jl")
@@ -44,12 +42,11 @@ include("histories.jl")
 include("archive.jl")
 include("aggregate.jl")
 include("cli.jl")
+include("legacy.jl")
+using .Legacy: vanraden_g   # for founder_summary
 
-export sum_map, sumMap, crossovers, gamete!, gene_drop, gene_drop!
-export random_mate, rnd_ped, expand, sample_id, sampleID, sample_loci, sampleLoci
-export norm_mv!, eqtl, scale_qtl, trait_summary, tbv!, phenotype!, dummy_traits, RandomSign, SpikeSlab
-export FounderPopulation, sample_founder_population
-export provenance
+export crossovers, sample_loci
+export eqtl, scale_qtl, trait_summary, RandomSign, SpikeSlab
 export SimKey, Domain, keyed_rng, philox4x64, keyed_int, keyed_shuffle!
 export MeiosisMap, MeiosisRecord, make_progeny!, ncrossovers
 export Population, founder_population, Scheme, evaluate!, select_parents, mating_plan, transport, step!, simulate!
@@ -57,10 +54,10 @@ export generation_summary, ngenerations, generation_ids, current_step, recorded,
     alive, genotyped, ocs_contributions,
     meioses, founder_segments, segment_inbreeding, irm
 export PedigreeView, pedigree_view, row_to_id, id_to_row, evaluation_view, pedigree, genomes, retained
+export tbv, ebv, phenotypes, records, traits, trait_qtl, covariances, parity
 export save_checkpoint, load_checkpoint
-export HistoricalSpec, historical_population, continue_population, founder_haplotypes
-export read_packed_haplotypes, write_xy
-export ld_decay, vanraden_g, founder_summary
+export founder_haplotypes
+export ld_decay, founder_summary
 export Scenario, ScenarioError, read_scenario, parse_scenario, validate_scenario, write_scenario, scenario_json,
     scenario_dict, run_scenario, run_replicate
 export cli, ExitCode
