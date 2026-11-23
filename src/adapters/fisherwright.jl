@@ -2,13 +2,15 @@
 # imports FisherWright only here; the rest of the package uses these names.
 module FisherWrightAdapter
 
-using FisherWright: FisherWright, fisher_wright, muts2bitarray, FisherWrightResult
+using FisherWright: FisherWright, fisher_wright, muts2bitarray, FisherWrightResult, bottleneck, growth,
+    RandomMating, trait_loci, TraitLoci, TraitFitness, Stabilizing, Directional
 using Random: AbstractRNG
 
 # The upstream package (for its version).
 const PACKAGE = FisherWright
 
-export fisher_wright, muts2bitarray, FisherWrightResult, census, dense_haplotypes
+export fisher_wright, muts2bitarray, FisherWrightResult, census, dense_haplotypes, bottleneck, growth,
+    RandomMating, trait_loci, TraitLoci, TraitFitness, Stabilizing, Directional
 
 """
     census(res::FisherWrightResult) -> Vector{Int}

@@ -1,5 +1,39 @@
 # BnGsim.jl release notes
 
+## v0.29.0 (2026-11-23)
+
+### New
+
+- Founder histories with demography and selection (Phase 2), scenario
+  keys of `founders`: `popsize` (`{"bottleneck": {size, start, duration,
+  recovery}}` or `{"growth": {rate, start, limit}}`, the census of the
+  `nt` historical generations), `sexratio` (a fixed proportion of males),
+  and `selection`, a quantitative trait under stabilizing or directional
+  selection in the history (`nsites`, effects `da`, mutation rate `mu`,
+  `sigma_e`, `fitness`; FisherWright's `TraitFitness`). With
+  `loci.qtl.from = "history"` the loci of that trait segregating among
+  the founders are the QTL of the (one) breeding trait, with their
+  historical effects times one factor (new `scale_qtl`, which `eqtl` now
+  uses); the chip comes from the other loci. The trait's alleles are
+  merged into the founder haplotypes (`founder_haplotypes(res, nid,
+  loci)`); a neutral mutation at a trait locus is dropped.
+- Checks: the census follows the trajectory and the number of male
+  parents is fixed; the merged haplotypes carry exactly the alleles of
+  `selected_haplotypes` at trait loci and the neutral ones elsewhere;
+  the QTL effects are the historical ones times one factor. Over 40
+  independent histories each (300 diploids, 1500 generations, 2000
+  trait loci): with near-neutral fitness cor(|a|, MAF) = 0.000 ± 0.011;
+  stabilizing selection (ω² = 1) gives −0.110 ± 0.011 and fewer
+  segregating loci (232 against 304); directional selection (β = 0.3)
+  gives +0.108 ± 0.010, the favourable allele at 0.516 ± 0.006 and lower
+  neutral diversity (MAF 0.037 against 0.093).
+
+### Changed
+
+- The canonical JSON of every scenario now lists `founders.popsize`,
+  `founders.sexratio`, `founders.selection` and `loci.qtl.from`, so its
+  SHA-256 changes; results with the defaults do not.
+
 ## v0.28.0 (2026-11-23)
 
 ### New

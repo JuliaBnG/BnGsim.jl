@@ -46,7 +46,7 @@ include("cli.jl")
 
 export sum_map, sumMap, crossovers, gamete!, gene_drop, gene_drop!
 export random_mate, rnd_ped, expand, sample_id, sampleID, sample_loci, sampleLoci
-export norm_mv!, eqtl, trait_summary, tbv!, phenotype!, dummy_traits, RandomSign, SpikeSlab
+export norm_mv!, eqtl, scale_qtl, trait_summary, tbv!, phenotype!, dummy_traits, RandomSign, SpikeSlab
 export FounderPopulation, sample_founder_population
 export provenance
 export SimKey, Domain, keyed_rng, philox4x64, keyed_int, keyed_shuffle!

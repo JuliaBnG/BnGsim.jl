@@ -111,8 +111,24 @@ function eqtl(
 )
     loc = loci isa LocusSet ? loci.loci : Int32.(loci)
     isempty(loc) && throw(ArgumentError("no QTL loci"))
+    return scale_qtl(hap, loc, Float64.(rand(rng, t.da, length(loc))), t; atol = atol)
+end
+
+"""
+    scale_qtl(hap::Haplotype, loci, a, t::AbstractTrait; atol = 1e-8) -> TraitQTL
+
+QTL of trait `t` at `loci` with the given effects `a` (of the allele
+coded 1), multiplied by one factor so that the genetic values of the
+individuals in `hap` have standard deviation `t.σₐ`, and mean 0 through
+the intercept: [`eqtl`](@ref) with effects given instead of drawn, e.g.
+those of a trait under selection in the history.
+"""
+function scale_qtl(hap::Haplotype, loc::AbstractVector{<:Integer}, a::AbstractVector{<:Real}, t::AbstractTrait;
+    atol::Real = 1e-8)
+    loc = Int32.(loc)
+    length(a) == length(loc) || throw(DimensionMismatch("one effect per locus"))
+    a = Float64.(a)
     Z = Float64.(dosage(hap, loc))                       # nqtl × nid
-    a = Float64.(rand(rng, t.da, length(loc)))
     g = Z' * a
     s = std(g)
     (isfinite(s) && s > 0) ||
