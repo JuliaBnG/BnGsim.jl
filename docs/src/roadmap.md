@@ -348,7 +348,10 @@ neutral SFS matches its expectation.
 ### Phase 3 — Meiosis, lifecycle, mating *(partly done)*
 
 1. `MeiosisModel`: Poisson/Haldane *(done)*, Gamma-count interference,
-   sex-specific maps.
+   sex-specific maps *(done, 0.31.0: `MeiosisMap(...; male, female,
+   interference)`, scenario `species.morgan_female` and
+   `species.interference`; crossover counts and r(d) checked against the
+   gamma model)*.
 2. Demography: age classes, parity, survival, reproductive limits, culling,
    and discrete or overlapping generations.
 3. Mating: random, assortative/disassortative, minimum-coancestry and a

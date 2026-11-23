@@ -6,7 +6,9 @@
 # - crossovers on chromosome c are a Poisson process with mean equal to its
 #   genetic length L_c in Morgans (`BnGStructs.map_length`), placed
 #   uniformly on the physical length (no interference; Haldane map, with a
-#   recombination rate constant along each chromosome);
+#   recombination rate constant along each chromosome); or, with
+#   interference ν ≠ 1, the gamma model (below); the length is the sire's
+#   or the dam's with sex-specific maps;
 # - the gamete switches parental haplotype at every crossover.
 # Loci are the rows of a `Haplotype`, at the genome-wide positions of a
 # `VariantMap`; a crossover at base x falls after the last locus at or
@@ -15,22 +17,44 @@
 """
     MeiosisMap(species, map::VariantMap)
 
+    MeiosisMap(species, map::VariantMap; male = nothing, female = nothing, interference = 1.0)
+
 The genome layout used by [`make_progeny!`](@ref), built once: for every
 chromosome its physical start and end (genome-wide bp), its genetic length
 in Morgans (from `BnGStructs.map_length`), and the range of loci of
 `map` on it. The map is checked against the species with
 `BnGStructs.check_coordinates`.
+
+Sex-specific maps: `male` and `female` are the genetic lengths of the
+chromosomes in the meioses of sires and dams (default: those of the
+species); a sire's gamete uses the male map, a dam's the female.
+
+Crossover interference (`interference = ν`): the chiasmata of the
+four-strand bundle form a stationary gamma renewal process along the
+chromosome, two per Morgan, with gaps ``\\mathrm{Gamma}(\\nu, 1/(2\\nu))``
+(the gamma model; McPeek and Speed 1995, Broman and Weber 2000), and each
+chiasma is in the gamete with probability ½ (no chromatid interference).
+The first chiasma lies at ``UX``, ``X`` the length-biased gap covering
+the start of the chromosome, ``\\mathrm{Gamma}(\\nu + 1, 1/(2\\nu))``, and
+``U`` uniform, so the process is stationary. A gamete then has on
+average ``L`` crossovers on a chromosome of ``L`` Morgans. `ν = 1` is
+Haldane's map (no interference), drawn as a Poisson count as before;
+`ν > 1` is positive interference (human data fit `ν ≈ 4.3`). Positions are
+linear in the physical length.
 """
 struct MeiosisMap
     pos::Vector{UInt32}          # genome-wide position of every locus
     first::Vector{UInt32}        # first base of each chromosome (genome-wide)
     last::Vector{UInt32}         # last base of each chromosome
-    morgan::Vector{Float64}      # genetic length of each chromosome
+    morgan::Vector{Float64}      # genetic length of each chromosome (sires)
     emorgan::Vector{Float64}     # exp(-morgan), for the Poisson draws
     loci::Vector{UnitRange{Int}} # loci on each chromosome (may be empty)
+    fmorgan::Vector{Float64}     # genetic length of each chromosome (dams)
+    efmorgan::Vector{Float64}
+    ν::Float64                   # interference (gamma shape; 1: none)
 end
 
-function MeiosisMap(sp::Species, vm::VariantMap)
+function MeiosisMap(sp::Species, vm::VariantMap; male = nothing, female = nothing, interference::Real = 1.0)
     check_coordinates(vm, sp)
     ends = cbp(sp)
     nchr = length(ends)
@@ -47,14 +71,21 @@ function MeiosisMap(sp::Species, vm::VariantMap)
         i = j
     end
     L = Float64.(map_length(sp))
-    MeiosisMap(copy(vm.pos), first, copy(ends), L, exp.(-L), loci)
+    Lm = male === nothing ? L : Float64.(collect(male))
+    Lf = female === nothing ? L : Float64.(collect(female))
+    length(Lm) == length(Lf) == nchr && all(x -> x >= 0 && isfinite(x), [Lm; Lf]) ||
+        throw(ArgumentError("male and female need one finite, non-negative length per chromosome ($nchr)"))
+    isfinite(interference) && interference > 0 || throw(ArgumentError("interference must be positive"))
+    MeiosisMap(copy(vm.pos), first, copy(ends), Lm, exp.(-Lm), loci, Lf, exp.(-Lf), Float64(interference))
 end
 
 Base.length(mm::MeiosisMap) = length(mm.pos)
 
 function Base.show(io::IO, mm::MeiosisMap)
     print(io, "MeiosisMap with ", length(mm.pos), " loci on ", length(mm.first),
-        " chromosomes, ", round(sum(mm.morgan); digits = 3), " M")
+        " chromosomes, ", round(sum(mm.morgan); digits = 3), " M",
+        mm.fmorgan == mm.morgan ? "" : " (sires), $(round(sum(mm.fmorgan); digits = 3)) M (dams)",
+        mm.ν == 1 ? "" : ", interference ν = $(mm.ν)")
 end
 
 # Poisson(λ) by inversion for the small means of one chromosome; its draws
@@ -87,16 +118,21 @@ end
 # crossover positions are appended to it and the starting phases (`true` =
 # the parent's second haplotype) are written to `phases`.
 function _gamete!(dst::BitMatrix, dcol::Int, src::BitMatrix, p::Int, nr::Int,
-    mm::MeiosisMap, rng::AbstractRNG, xo::Vector{UInt32}, rec, phases)
+    mm::MeiosisMap, rng::AbstractRNG, xo::Vector{UInt32}, rec, phases; dam::Bool = false)
     pos = mm.pos
     for c in eachindex(mm.first)
         phase = rand(rng, Bool)
-        k = _poisson(rng, mm.morgan[c], mm.emorgan[c])
-        resize!(xo, k)
-        for t = 1:k
-            xo[t] = keyed_int(rng, mm.first[c], mm.last[c])
+        L = dam ? mm.fmorgan[c] : mm.morgan[c]
+        if mm.ν == 1
+            k = _poisson(rng, L, dam ? mm.efmorgan[c] : mm.emorgan[c])
+            resize!(xo, k)
+            for t = 1:k
+                xo[t] = keyed_int(rng, mm.first[c], mm.last[c])
+            end
+            k > 1 && sort!(xo; alg = InsertionSort)
+        else
+            _gamma_crossovers!(xo, rng, L, mm.ν, mm.first[c], mm.last[c])
         end
-        k > 1 && sort!(xo; alg = InsertionSort)
         if phases !== nothing
             phases[c] = phase
             append!(rec, xo)
@@ -113,6 +149,25 @@ function _gamete!(dst::BitMatrix, dcol::Int, src::BitMatrix, p::Int, nr::Int,
         _copy_segment!(dst, dcol, src, 2p - 1 + phase, nr, a, last(r))
     end
     return nothing
+end
+
+# Crossovers of one gamete on a chromosome of `L` Morgans, bases a:b,
+# under the gamma model with shape ν (see `MeiosisMap`), sorted: chiasmata
+# at a stationary gamma renewal process of rate 2 per Morgan, each kept
+# with probability ½, and their genetic positions mapped linearly to bases.
+function _gamma_crossovers!(xo::Vector{UInt32}, rng::AbstractRNG, L::Float64, ν::Float64, a::UInt32, b::UInt32)
+    empty!(xo)
+    L > 0 || return xo
+    θ = 1 / (2ν)
+    t = rand(rng) * rand(rng, Gamma(ν + 1, θ))        # first chiasma: uniform in the length-biased gap
+    span = Float64(b - a + 1)
+    while t < L
+        if rand(rng, Bool)
+            push!(xo, a + UInt32(min(floor(Int, t / L * span), Int(b - a))))
+        end
+        t += rand(rng, Gamma(ν, θ))
+    end
+    return xo
 end
 
 """
@@ -183,7 +238,7 @@ function make_progeny!(off::Haplotype, par::Haplotype, plan::AbstractMatrix{<:In
                 g = 2i - 2 + k
                 rng = keyed_rng(SimKey(key; domain = Domain.MEIOSIS, entity = i, subcounter = k - 1))
                 _gamete!(dst, g, src, Int(plan[i, k]), nr, mm, rng, xo,
-                    record ? recs[g] : nothing, ph)
+                    record ? recs[g] : nothing, ph; dam = k == 2)
                 record && (phase[:, g] = ph)
             end
         end

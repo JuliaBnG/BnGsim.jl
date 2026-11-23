@@ -74,7 +74,7 @@ function _execute(dir, s::Scenario, reps; checkpoint_every::Integer=0, should_st
         any(d -> d.first == r, done) && continue
         if cur !== nothing && cur.replicate == r
             sc = Scheme(; s.scheme..., chip=cur.chip)
-            rep = (; population=cur.population, scheme=sc, meiosis=MeiosisMap(sp, cur.map), species=sp,
+            rep = (; population=cur.population, scheme=sc, meiosis=_meiosis_map(s, sp, cur.map), species=sp,
                 map=cur.map, qtl=cur.qtl, chip=cur.chip)
             g0, rows = cur.step, cur.rows
             cur = nothing

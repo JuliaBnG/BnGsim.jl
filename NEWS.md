@@ -1,5 +1,37 @@
 # BnGsim.jl release notes
 
+## v0.31.0 (2026-11-23)
+
+### New
+
+- Meiosis models (Phase 3). `MeiosisMap(species, map; male, female,
+  interference)` and the scenario keys `species.morgan_female` and
+  `species.interference`:
+  - sex-specific genetic maps: a sire's gamete uses the male lengths
+    (`morgan`), a dam's the female ones (`morgan_female`); the historical
+    population, simulated by FisherWright with one map, uses their
+    average;
+  - crossover interference, the gamma model with shape ν: chiasmata of
+    the four-strand bundle at a stationary gamma renewal process (two per
+    Morgan, gaps Gamma(ν, 1/(2ν)), the first from the length-biased gap
+    covering the chromosome start), each in the gamete with probability ½
+    (no chromatid interference). ν = 1 (default) is Haldane's map, drawn
+    as before.
+- Checks over 100 000 gametes on a 1 M (sires) / 1.5 M (dams)
+  chromosome: mean crossovers 0.998 ± 0.003 and 1.497 ± 0.004 at ν = 1,
+  1.005 ± 0.003 and 1.503 ± 0.003 at ν = 4.3 (variance 0.66 against 1.00:
+  underdispersed); r(d) at d = 0.05, 0.2 and 0.5 M within 1.5 SE of
+  ½(1 − P₀(d)) for the stationary gamma process (Haldane's at ν = 1;
+  0.4063 ± 0.0016 against 0.4056 at d = 0.5, ν = 4.3).
+
+### Changed
+
+- The canonical JSON of every scenario now lists `species.morgan_female`
+  and `species.interference`, so its SHA-256 changes; with the defaults
+  the simulation does not (golden checksums unchanged). Stored histories
+  of 0.30.0 remain valid: their manifest compares the species as the
+  history sees it (name, chromosomes, average map).
+
 ## v0.30.0 (2026-11-23)
 
 ### New
