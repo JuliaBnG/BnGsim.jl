@@ -57,7 +57,9 @@ per meiosis (`1.0`); then `decline` (`[]`), the census sizes of further
 generations (e.g. a decline to a breed); and `nid`, the founders sampled
 from the last generation. With `shared_history` (`true`) one historical
 population serves every replicate, each sampling its own founders;
-otherwise each replicate runs its own.
+otherwise each replicate runs its own. `herds` (`1`): the number of herds
+the founders are spread over at random; offspring are born in their
+dam's herd (contemporary groups, see `c2` of the traits).
 
 **`loci`**: `qtl`, `{"nlc", "maf"}` (`maf` `0.0`: loci with minor allele
 frequency above `maf` among the founders); `chip` (`null`), the same for
@@ -76,7 +78,10 @@ the distribution of the QTL effects before scaling,
 ([`SpikeSlab`](@ref): a fraction `pi` of the effects from `Normal(0, sd)`,
 the others `0`, or from `Normal(0, spike_sd)`). Effects are scaled to
 `sigma_a` afterwards, so only the shape of the distribution matters; with
-several traits, only the first keeps it (see [`eqtl`](@ref)).
+several traits, only the first keeps it (see [`eqtl`](@ref)). `c2` (`0.0`, in `[0, 1)`): the variance of the contemporary-group
+effects (herd × time step of the record) as a fraction of the founders'
+`sigma_a² + sigma_e²`; `h2` is then the heritability within groups. Any
+`c2 > 0` makes evaluations fit the groups as fixed effects.
 
 **`genetic_correlation`**, **`residual_correlation`** (identity): `k × k`
 correlation matrices of `k` traits, as arrays of rows.
@@ -98,12 +103,13 @@ struct Scenario
     replicates::Int
     steps::Int
     species::@NamedTuple{name::String, chromosome::Vector{Int}, morgan::Vector{Float64}}
-    founders::@NamedTuple{ne::Int, nt::Int, mr::Float64, decline::Vector{Int}, nid::Int, shared_history::Bool}
+    founders::@NamedTuple{ne::Int, nt::Int, mr::Float64, decline::Vector{Int}, nid::Int, shared_history::Bool,
+        herds::Int}
     qtl::@NamedTuple{nlc::Int, maf::Float64}
     chip::Union{Nothing,@NamedTuple{nlc::Int, maf::Float64}}
     overlap::Symbol
     traits::Vector{@NamedTuple{name::String, h2::Float64, sigma_a::Float64, mu::Float64, sex::Int, age::Int,
-        da::@NamedTuple{family::Symbol, a::Float64, b::Float64, c::Float64, sign::Symbol}}}
+        da::@NamedTuple{family::Symbol, a::Float64, b::Float64, c::Float64, sign::Symbol}, c2::Float64}}
     genetic_correlation::Matrix{Float64}
     residual_correlation::Matrix{Float64}
     scheme::NamedTuple
@@ -396,7 +402,7 @@ end
 function _founders(c, d)
     d === nothing && return nothing
     path = "founders"
-    _known!(c, d, path, ["ne", "nt", "mr", "decline", "nid", "shared_history"])
+    _known!(c, d, path, ["ne", "nt", "mr", "decline", "nid", "shared_history", "herds"])
     ne = _get(c, d, path, "ne", :int; check=_atleast(2))
     nt = _get(c, d, path, "nt", :int; check=_positive)
     mr = _get(c, d, path, "mr", :float; default=1.0,
@@ -405,11 +411,12 @@ function _founders(c, d)
         check=v -> all(>=(2), v) ? nothing : "every size must be at least 2")
     nid = _get(c, d, path, "nid", :int; check=_atleast(2))
     shared = _get(c, d, path, "shared_history", :bool; default=true)
-    any(isnothing, (ne, nt, mr, decline, nid, shared)) && return nothing
+    herds = _get(c, d, path, "herds", :int; default=1, check=_positive)
+    any(isnothing, (ne, nt, mr, decline, nid, shared, herds)) && return nothing
     last = isempty(decline) ? ne : decline[end]
     nid <= last || (_err!(c, "$path.nid", "exceeds the $last individuals of the last historical generation");
         return nothing)
-    return (ne=ne, nt=nt, mr=mr, decline=decline, nid=nid, shared_history=shared)
+    return (ne=ne, nt=nt, mr=mr, decline=decline, nid=nid, shared_history=shared, herds=herds)
 end
 
 function _panel(c, d, path)
@@ -443,7 +450,7 @@ function _traits(c, d)
     for (i, t) in pairs(v)
         path = "traits[$i]"
         _isobject(t) || (_err!(c, path, "must be an object"); continue)
-        _known!(c, t, path, ["name", "h2", "sigma_a", "mu", "sex", "age", "da"])
+        _known!(c, t, path, ["name", "h2", "sigma_a", "mu", "sex", "age", "da", "c2"])
         name = _get(c, t, path, "name", :string; check=x -> occursin(r"^[[:alpha:]_\p{L}][\p{L}\p{N}_]*$", x) ?
             nothing : "must be a valid identifier (letters, digits, _; not starting with a digit)")
         h2 = _get(c, t, path, "h2", :float; default=0.25, check=x -> 0 < x <= 1 ? nothing : "must lie in (0, 1]")
@@ -452,8 +459,9 @@ function _traits(c, d)
         sex = _get(c, t, path, "sex", :int; default=2, check=x -> x in 0:2 ? nothing : "must be 0 (females), 1 (males) or 2 (both)")
         age = _get(c, t, path, "age", :int; default=0, check=_nonneg)
         da = _da(c, t, path)
-        any(isnothing, (name, h2, sa, mu, sex, age, da)) && continue
-        push!(out, (name=name, h2=h2, sigma_a=sa, mu=mu, sex=sex, age=age, da=da))
+        c2 = _get(c, t, path, "c2", :float; default=0.0, check=x -> 0 <= x < 1 ? nothing : "must lie in [0, 1)")
+        any(isnothing, (name, h2, sa, mu, sex, age, da, c2)) && continue
+        push!(out, (name=name, h2=h2, sigma_a=sa, mu=mu, sex=sex, age=age, da=da, c2=c2))
     end
     names = [t.name for t in out]
     allunique(names) || _err!(c, "traits", "trait names must be unique")
@@ -551,7 +559,7 @@ function scenario_dict(s::Scenario)
     sp = O("name" => s.species.name, "chromosome" => s.species.chromosome, "morgan" => s.species.morgan)
     f = s.founders
     fo = O("ne" => f.ne, "nt" => f.nt, "mr" => f.mr, "decline" => f.decline, "nid" => f.nid,
-        "shared_history" => f.shared_history)
+        "shared_history" => f.shared_history, "herds" => f.herds)
     panel(p) = p === nothing ? nothing : O("nlc" => p.nlc, "maf" => p.maf)
     lo = O("qtl" => panel(s.qtl), "chip" => panel(s.chip), "overlap" => String(s.overlap))
     da(d) = d.family === :normal ? O("family" => "normal", "mean" => d.a, "sd" => d.b) :
@@ -559,7 +567,7 @@ function scenario_dict(s::Scenario)
             d.family === :laplace ? O("family" => "laplace", "scale" => d.b) :
             O("family" => "spike_slab", "pi" => d.a, "sd" => d.b, "spike_sd" => d.c)
     tr = [O("name" => t.name, "h2" => t.h2, "sigma_a" => t.sigma_a, "mu" => t.mu, "sex" => t.sex, "age" => t.age,
-        "da" => da(t.da)) for t in s.traits]
+        "da" => da(t.da), "c2" => t.c2) for t in s.traits]
     sc = O()
     for (key, kw, kind, _, _) in _SCHEME_FIELDS
         v = getfield(s.scheme, kw)
@@ -659,10 +667,11 @@ function _setup_replicate(s::Scenario, r::Integer, history)
     ts = [Trait(t.name; sex=t.sex, age=t.age, h²=t.h2, μ=t.mu, σₐ=t.sigma_a, da=_dist(t.da)) for t in s.traits]
     qrng = keyed_rng(SimKey(key; domain=Domain.QTL))
     pop = if length(ts) == 1
-        founder_population(hap, eqtl(hap, panels[1], ts[1]; rng=qrng), ts[1], key)
+        founder_population(hap, eqtl(hap, panels[1], ts[1]; rng=qrng), ts[1], key;
+            herds=s.founders.herds, c2=s.traits[1].c2)
     else
         founder_population(hap, eqtl(hap, panels[1], s.genetic_correlation, ts; rng=qrng), ts, key;
-            Re=s.residual_correlation)
+            Re=s.residual_correlation, herds=s.founders.herds, c2=[t.c2 for t in s.traits])
     end
     chip = s.chip === nothing ? Int32[] : Int32.(panels[2].loci)
     sc = Scheme(; s.scheme..., chip=chip)
