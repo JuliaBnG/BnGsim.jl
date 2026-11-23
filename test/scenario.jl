@@ -38,7 +38,7 @@ end
     @test s.species.chromosome == [20_000_000, 10_000_000] && s.species.morgan == [0.2, 0.1]
     @test s.founders == (ne=100, nt=500, mr=1.0, decline=Int[], nid=50, shared_history=true)
     @test s.qtl == (nlc=50, maf=0.01) && s.chip === nothing && s.overlap === :disjoint
-    @test s.traits[1] == (name="y", h2=0.3, sigma_a=1.0, mu=0.0, sex=2, age=0, da=(family=:normal, a=0.0, b=1.0))
+    @test s.traits[1] == (name="y", h2=0.3, sigma_a=1.0, mu=0.0, sex=2, age=0, da=(family=:normal, a=0.0, b=1.0, c=0.0, sign=:positive))
     @test s.genetic_correlation == ones(1, 1) && s.residual_correlation == ones(1, 1)
     # Scheme defaults are those of Scheme itself.
     d = Scheme(; noff=50, nsire=5, ndam=20)
@@ -59,7 +59,7 @@ end
     rm(path)
     t = parse_scenario(scenario_doc())
     @test parse_scenario(scenario_json(t)) == t && ntraits(t) == 2
-    @test t.traits[2].da == (family=:gamma, a=0.5, b=1.0) && t.genetic_correlation == [1.0 -0.3; -0.3 1.0]
+    @test t.traits[2].da == (family=:gamma, a=0.5, b=1.0, c=0.0, sign=:positive) && t.genetic_correlation == [1.0 -0.3; -0.3 1.0]
     # Presets resolve to the species' genome.
     c = parse_scenario(edited(["species"], Dict{String,Any}("preset" => "Cattle")))
     @test c.species.chromosome == Int.(Cattle().chromosome) && c.species.morgan == Cattle().morgan

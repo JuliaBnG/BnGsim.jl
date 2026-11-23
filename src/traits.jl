@@ -31,6 +31,53 @@ function norm_mv!(
     return vals
 end
 
+"""
+    RandomSign(d)
+
+Effects drawn from the distribution `d` with a random sign: `x` from `d`,
+then `-x` with probability ½ (one draw from `d`, then one `Bool`, per
+effect). With a Gamma `d`, the effect distribution of Meuwissen, Hayes and
+Goddard (2001): symmetric, with the heavy tails of the Gamma. Used as a
+`Trait`'s `da` (scenario family `"gamma"` with `"sign": "random"`). Only
+`rand`, `mean` (0) and `var` (``E[x^2]`` of `d`) are defined.
+"""
+struct RandomSign{D<:UnivariateDistribution} <: ContinuousUnivariateDistribution
+    d::D
+end
+Statistics.mean(::RandomSign) = 0.0
+Statistics.var(s::RandomSign) = var(s.d) + mean(s.d)^2
+function Base.rand(rng::AbstractRNG, s::RandomSign)
+    x = rand(rng, s.d)
+    return rand(rng, Bool) ? -x : x
+end
+
+"""
+    SpikeSlab(π, sd; spike_sd = 0.0)
+
+A spike-and-slab effect distribution: with probability `π` an effect from
+the slab `Normal(0, sd)`, otherwise from the spike, exactly `0` (or
+`Normal(0, spike_sd)` with `spike_sd > 0`). One uniform, then one normal
+when the effect is not exactly zero, per effect. With a point-mass spike,
+about a fraction `1 - π` of the QTL have no effect (scenario family
+`"spike_slab"`). Only `rand`, `mean` (0) and `var` are defined.
+"""
+struct SpikeSlab <: ContinuousUnivariateDistribution
+    π::Float64
+    sd::Float64
+    spike_sd::Float64
+    function SpikeSlab(π::Real, sd::Real; spike_sd::Real = 0.0)
+        0 < π <= 1 || throw(ArgumentError("π must lie in (0, 1]"))
+        sd > 0 && spike_sd >= 0 || throw(ArgumentError("sd must be positive and spike_sd non-negative"))
+        new(π, sd, spike_sd)
+    end
+end
+Statistics.mean(::SpikeSlab) = 0.0
+Statistics.var(s::SpikeSlab) = s.π * s.sd^2 + (1 - s.π) * s.spike_sd^2
+function Base.rand(rng::AbstractRNG, s::SpikeSlab)
+    rand(rng) < s.π && return s.sd * randn(rng)
+    return s.spike_sd > 0 ? s.spike_sd * randn(rng) : 0.0
+end
+
 # Extract nqtl × nid Int8 dosage matrix at `loci` from a Haplotype
 _qtl_dosage_matrix(hap::Haplotype, loci::AbstractVector{<:Integer}) = dosage(hap, loci)
 

@@ -726,9 +726,7 @@ function select_parents(pop::Population, sc::Scheme, m)
         "raise the maximum ages or the survival"))
     cand = sort!([males; females])
     if sc.selection in (:truncation, :random)
-        crit = sc.selection == :truncation ? index :
-               [rand(keyed_rng(SimKey(pop.key; generation = g, domain = Domain.SELECTION,
-                    stage = _STAGE_RANDOM_SELECTION, entity = i))) for i = 1:length(pop)]
+        crit = sc.selection == :truncation ? index : _random_criterion(pop, g, cand)
         s = _best(males, crit[males], sc.nsire)
         d = _best(females, crit[females], sc.ndam)
         s = sort(s)
@@ -762,6 +760,18 @@ function select_parents(pop::Population, sc::Scheme, m)
     ns, nd = _allocate(s, c[ms], sc.noff), _allocate(d, c[fs], sc.noff)
     keep_s, keep_d = ns .> 0, nd .> 0
     return s[keep_s], ns[keep_s], d[keep_d], nd[keep_d], info
+end
+
+# A keyed uniform per candidate (entity = id), NaN for the other animals:
+# drawn for the candidates only, as their values do not depend on which
+# other animals exist.
+function _random_criterion(pop::Population, g, cand)
+    crit = fill(NaN, length(pop))
+    for i in cand
+        crit[i] = rand(keyed_rng(SimKey(pop.key; generation = g, domain = Domain.SELECTION,
+            stage = _STAGE_RANDOM_SELECTION, entity = i)))
+    end
+    return crit
 end
 
 """

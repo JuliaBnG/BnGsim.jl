@@ -68,8 +68,15 @@ the genotyping panel, needed by `:gblup` and `:ssgblup`; `overlap`
 "mu" (0.0), "sex" (2), "age" (0), "da"}`, as `BnGStructs.Trait`: `sex` `0`
 females, `1` males, `2` both; `age` the whole time step of the record; `da`
 the distribution of the QTL effects before scaling,
-`{"family": "normal", "mean": 0.0, "sd": 1.0}` (default) or
-`{"family": "gamma", "shape", "scale"}`.
+`{"family": "normal", "mean": 0.0, "sd": 1.0}` (default),
+`{"family": "gamma", "shape", "scale": 1.0, "sign": "positive"}` (`"sign":
+"random"` for effects of either sign, [`RandomSign`](@ref)),
+`{"family": "laplace", "scale": 1.0}` (location 0) or
+`{"family": "spike_slab", "pi", "sd": 1.0, "spike_sd": 0.0}`
+([`SpikeSlab`](@ref): a fraction `pi` of the effects from `Normal(0, sd)`,
+the others `0`, or from `Normal(0, spike_sd)`). Effects are scaled to
+`sigma_a` afterwards, so only the shape of the distribution matters; with
+several traits, only the first keeps it (see [`eqtl`](@ref)).
 
 **`genetic_correlation`**, **`residual_correlation`** (identity): `k × k`
 correlation matrices of `k` traits, as arrays of rows.
@@ -96,7 +103,7 @@ struct Scenario
     chip::Union{Nothing,@NamedTuple{nlc::Int, maf::Float64}}
     overlap::Symbol
     traits::Vector{@NamedTuple{name::String, h2::Float64, sigma_a::Float64, mu::Float64, sex::Int, age::Int,
-        da::@NamedTuple{family::Symbol, a::Float64, b::Float64}}}
+        da::@NamedTuple{family::Symbol, a::Float64, b::Float64, c::Float64, sign::Symbol}}}
     genetic_correlation::Matrix{Float64}
     residual_correlation::Matrix{Float64}
     scheme::NamedTuple
@@ -455,23 +462,36 @@ function _traits(c, d)
 end
 
 function _da(c, t, path)
-    haskey(t, "da") || return (family=:normal, a=0.0, b=1.0)
+    haskey(t, "da") || return (family=:normal, a=0.0, b=1.0, c=0.0, sign=:positive)
     p = "$path.da"
     d = t["da"]
     _isobject(d) || (_err!(c, p, "must be an object"); return nothing)
-    fam = _get(c, d, p, "family", :symbol; choices=[:normal, :gamma])
+    fam = _get(c, d, p, "family", :symbol; choices=[:normal, :gamma, :laplace, :spike_slab])
     fam === nothing && return nothing
+    x, sign = 0.0, :positive
     if fam === :normal
         _known!(c, d, p, ["family", "mean", "sd"])
         a = _get(c, d, p, "mean", :float; default=0.0)
         b = _get(c, d, p, "sd", :float; default=1.0, check=_positive)
-    else
-        _known!(c, d, p, ["family", "shape", "scale"])
+    elseif fam === :gamma
+        _known!(c, d, p, ["family", "shape", "scale", "sign"])
         a = _get(c, d, p, "shape", :float; check=_positive)
         b = _get(c, d, p, "scale", :float; default=1.0, check=_positive)
+        sign = _get(c, d, p, "sign", :symbol; default=:positive, choices=[:positive, :random])
+        sign === nothing && return nothing
+    elseif fam === :laplace
+        _known!(c, d, p, ["family", "scale"])
+        a = 0.0
+        b = _get(c, d, p, "scale", :float; default=1.0, check=_positive)
+    else
+        _known!(c, d, p, ["family", "pi", "sd", "spike_sd"])
+        a = _get(c, d, p, "pi", :float; check=x -> 0 < x <= 1 ? nothing : "must lie in (0, 1]")
+        b = _get(c, d, p, "sd", :float; default=1.0, check=_positive)
+        x = _get(c, d, p, "spike_sd", :float; default=0.0, check=x -> x >= 0 ? nothing : "must not be negative")
+        x === nothing && return nothing
     end
     (a === nothing || b === nothing) && return nothing
-    return (family=fam, a=a, b=b)
+    return (family=fam, a=a, b=b, c=x, sign=sign)
 end
 
 function _correlation(c, d, key, k)
@@ -535,7 +555,9 @@ function scenario_dict(s::Scenario)
     panel(p) = p === nothing ? nothing : O("nlc" => p.nlc, "maf" => p.maf)
     lo = O("qtl" => panel(s.qtl), "chip" => panel(s.chip), "overlap" => String(s.overlap))
     da(d) = d.family === :normal ? O("family" => "normal", "mean" => d.a, "sd" => d.b) :
-            O("family" => "gamma", "shape" => d.a, "scale" => d.b)
+            d.family === :gamma ? O("family" => "gamma", "shape" => d.a, "scale" => d.b, "sign" => String(d.sign)) :
+            d.family === :laplace ? O("family" => "laplace", "scale" => d.b) :
+            O("family" => "spike_slab", "pi" => d.a, "sd" => d.b, "spike_sd" => d.c)
     tr = [O("name" => t.name, "h2" => t.h2, "sigma_a" => t.sigma_a, "mu" => t.mu, "sex" => t.sex, "age" => t.age,
         "da" => da(t.da)) for t in s.traits]
     sc = O()
@@ -597,7 +619,9 @@ function _history(s::Scenario, sp::Species, r::Integer)
         init=res, popsize=f.decline, result=true, rng=keyed_rng(SimKey(key; stage=_STAGE_DECLINE)))
 end
 
-_dist(d) = d.family === :normal ? Normal(d.a, d.b) : Gamma(d.a, d.b)
+_dist(d) = d.family === :normal ? Normal(d.a, d.b) :
+           d.family === :gamma ? (d.sign === :random ? RandomSign(Gamma(d.a, d.b)) : Gamma(d.a, d.b)) :
+           d.family === :laplace ? Laplace(0.0, d.b) : SpikeSlab(d.a, d.b; spike_sd=d.c)
 
 """
     run_replicate(s::Scenario, r = 1; history = nothing)
