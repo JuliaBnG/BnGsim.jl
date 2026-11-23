@@ -327,7 +327,8 @@ run. The garbage collector alone moves the peak of one scenario by up to
    records *(done: a trait's `age`)*, repeated records *(done, 0.26.0: one
    trait, records per step alive from its age, permanent environment from
    the repeatability, fitted as a random effect)*, missing-record masks
-   *(to do)*. Multi-trait repeated records *(done, 0.27.0: correlated
+   *(done, 0.28.0: at random per record, and herds not recording a
+   trait)*. Multi-trait repeated records *(done, 0.27.0: correlated
    permanent environments, residuals correlated among the records of one
    animal and step, single-record and repeated traits mixed)*.
 6. Founder histories with selection or demography, using the FisherWright

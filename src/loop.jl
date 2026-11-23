@@ -31,6 +31,8 @@ const _STAGE_CG = 0x0005                # Domain.PHENOTYPE: herd × step effects
 const _STAGE_PAIR_COST = 0x0006         # Domain.MATING: random costs under a pair limit
 const _STAGE_PE = 0x0007                # Domain.PHENOTYPE: permanent environment, at birth
 const _STAGE_RECORD = 0x0008            # Domain.PHENOTYPE: a repeated record, per step
+const _STAGE_MISSING = 0x0009           # Domain.PHENOTYPE: a record missing at random
+const _STAGE_HERD_MISSING = 0x000a      # Domain.PHENOTYPE: herds not recording a trait
 
 # The repeated records of a population (traits with `records > 1`), one
 # entry per record: animal, trait, time step, value.
@@ -108,6 +110,9 @@ mutable struct Population
     PE0::Matrix{Float64}
     records::RepeatedRecords
     Lpe::Matrix{Float64}
+    pmiss::Vector{Float64}
+    hmiss::Vector{Float64}
+    nobs::Matrix{Int32}
 end
 
 Base.length(pop::Population) = length(pop.sire)
@@ -169,6 +174,14 @@ so far (`NaN` before the first). `pop.R0` is then the covariance of the
 temporary residuals and `pop.PE0` that of the permanent environments
 used by the evaluations.
 
+Missing records: `missing` (a number, or one per trait) is the
+probability that a record is missing at random, a keyed draw per animal,
+trait and time step of the record; `unrecorded_herds` the probability
+that a herd never records a trait, a keyed draw per herd and trait. A
+missing record is not made (`NaN` as phenotype, no entry in
+`pop.records`); the values of the other records do not change, as the
+masks have their own keyed streams.
+
 A trait's `sex` (`0` females, `1` males, `2` both) limits its records to
 one sex; its `age`, a whole number of time steps, is the age at which a
 record becomes available to evaluations (`0`: at birth). Phenotypes are
@@ -177,12 +190,14 @@ stream, so these settings change which records are seen, not the values
 drawn.
 """
 function founder_population(hap::Haplotype, qtl::TraitQTL, trait::Trait, key::SimKey; herds::Integer = 1,
-    c2 = 0.0, records::Integer = 1, repeatability = nothing)
-    _founders(hap, [qtl], Trait[trait], key, ones(1, 1), herds, c2, records, repeatability, ones(1, 1))
+    c2 = 0.0, records::Integer = 1, repeatability = nothing, missing = 0.0, unrecorded_herds = 0.0)
+    _founders(hap, [qtl], Trait[trait], key, ones(1, 1), herds, c2, records, repeatability, ones(1, 1), missing,
+        unrecorded_herds)
 end
 
 function founder_population(hap::Haplotype, qtl::MultiTraitQTL, traits::AbstractVector{<:Trait}, key::SimKey;
-    Re = I, herds::Integer = 1, c2 = 0.0, records = 1, repeatability = nothing, Rpe = I)
+    Re = I, herds::Integer = 1, c2 = 0.0, records = 1, repeatability = nothing, Rpe = I, missing = 0.0,
+    unrecorded_herds = 0.0)
     k = length(traits)
     qtl.trait_names == [t.name for t in traits] ||
         throw(ArgumentError("the traits must be those of the QTL, in order: $(qtl.trait_names)"))
@@ -195,11 +210,16 @@ function founder_population(hap::Haplotype, qtl::MultiTraitQTL, traits::Abstract
     Pm = Rpe isa UniformScaling ? Matrix{Float64}(Rpe(k)) : Matrix{Float64}(Rpe)
     size(Pm) == (k, k) && issymmetric(Pm) && all(Pm[j, j] == 1 for j = 1:k) ||
         throw(ArgumentError("Rpe must be a $k × $k correlation matrix"))
-    _founders(hap, qs, Vector{Trait}(traits), key, Rm, herds, c2, records, repeatability, Pm)
+    _founders(hap, qs, Vector{Trait}(traits), key, Rm, herds, c2, records, repeatability, Pm, missing,
+        unrecorded_herds)
 end
 
-function _founders(hap, qs, traits, key, Re, herds, c2, records, repeatability, Rpe)
+function _founders(hap, qs, traits, key, Re, herds, c2, records, repeatability, Rpe, missing, unrecorded_herds)
     k = length(traits)
+    per(x, what) = (v = x isa Real ? fill(Float64(x), k) : Float64.(collect(x));
+        length(v) == k && all(p -> 0 <= p < 1, v) || throw(ArgumentError("$what must lie in [0, 1), one number or one per trait"));
+        v)
+    pmiss, hmiss = per(missing, "missing"), per(unrecorded_herds, "unrecorded_herds")
     h²s = [t.h² for t in traits]
     nrec = records isa Integer ? fill(Int(records), k) : Int.(collect(records))
     length(nrec) == k && all(>=(1), nrec) || throw(ArgumentError("records must be at least 1, one number or one per trait"))
@@ -240,7 +260,7 @@ function _founders(hap, qs, traits, key, Re, herds, c2, records, repeatability, 
     pop = Population(zeros(Int32, n), zeros(Int32, n), falses(n), zeros(Int32, n), fill(typemax(Int32), n), G,
         fill(NaN, size(G)), fill(NaN, size(G)), Union{Nothing,Haplotype}[hap], [1], Int32.(1:n), qs, traits, Lr, key, G0, R0,
         Union{Nothing,MeiosisRecord}[], ones(Int32, n), sqrt.(c2v .* Vp),
-        nrec, σpe, zeros(n, k), Lpe * Lpe', RepeatedRecords(), Lpe)
+        nrec, σpe, zeros(n, k), Lpe * Lpe', RepeatedRecords(), Lpe, pmiss, hmiss, zeros(Int32, n, k))
     if herds > 1
         for i = 1:n
             pop.herd[i] = keyed_int(keyed_rng(SimKey(key; generation = 0, domain = Domain.MATING,
@@ -377,9 +397,32 @@ function _phenotypes!(pop::Population, ids, g)
                 e += pop.Lr[j, l] * z[l]
             end
             t = pop.traits[j]
-            pop.phenotype[i, j] = _expresses(t, pop.male[i]) ? t.μ + pop.tbv[i, j] + e + _cg(pop, i, j) : NaN
+            pop.phenotype[i, j] = _expresses(t, pop.male[i]) && !_missing(pop, i, j, g + Int(t.age)) ?
+                t.μ + pop.tbv[i, j] + e + _cg(pop, i, j) : NaN
         end
     end
+end
+
+# Whether animal i's record of trait j made at step s is missing: its herd
+# does not record the trait (one keyed draw per herd and trait), or the
+# record is missing at random (one keyed draw per animal, step and trait).
+function _missing(pop::Population, i, j, s)
+    if pop.hmiss[j] > 0
+        rng = keyed_rng(SimKey(pop.key; generation = 0, domain = Domain.PHENOTYPE, stage = _STAGE_HERD_MISSING,
+            entity = pop.herd[i]))
+        u = 0.0
+        for _ = 1:j
+            u = rand(rng)
+        end
+        u < pop.hmiss[j] && return true
+    end
+    pop.pmiss[j] > 0 || return false
+    rng = keyed_rng(SimKey(pop.key; generation = s, domain = Domain.PHENOTYPE, stage = _STAGE_MISSING, entity = i))
+    u = 0.0
+    for _ = 1:j
+        u = rand(rng)
+    end
+    return u < pop.pmiss[j]
 end
 
 # Whether records are made step by step (some trait has repeated records):
@@ -414,10 +457,12 @@ function _record!(pop::Population, g)
             for l = 1:j
                 e += pop.Lr[j, l] * z[l]
             end
+            _missing(pop, i, j, g) && continue
             y = pop.traits[j].μ + pop.tbv[i, j] + pop.pe[i, j] + _cg(pop, i, j, g) + e
             push!(pop.records.id, i); push!(pop.records.trait, j); push!(pop.records.step, g); push!(pop.records.y, y)
+            c = pop.nobs[i, j] += 1
             m = pop.phenotype[i, j]
-            pop.phenotype[i, j] = nth == 1 ? y : m + (y - m) / nth
+            pop.phenotype[i, j] = c == 1 ? y : m + (y - m) / c
         end
     end
     return pop
@@ -772,6 +817,8 @@ function evaluate!(pop::Population, sc::Scheme)
     elseif sc.evaluation == :phenotype
         all(t -> t.sex == 2 && t.age == 0, pop.traits) ||
             throw(ArgumentError(":phenotype needs every trait recorded at birth in both sexes"))
+        all(iszero, pop.pmiss) && all(iszero, pop.hmiss) ||
+            throw(ArgumentError(":phenotype needs every record; missing records leave candidates without one"))
         pop.ebv .= pop.phenotype
         return nothing
     end
@@ -1197,6 +1244,7 @@ function step!(pop::Population, sc::Scheme, mm::MeiosisMap)
     pop.phenotype = vcat(pop.phenotype, fill(NaN, sc.noff, k))
     pop.ebv = vcat(pop.ebv, fill(NaN, sc.noff, k))
     pop.pe = vcat(pop.pe, zeros(sc.noff, k))
+    pop.nobs = vcat(pop.nobs, zeros(Int32, sc.noff, k))
     append!(pop.exit, fill(typemax(Int32), sc.noff))
     push!(pop.blocks, off)
     push!(pop.first, n0 + 1)
