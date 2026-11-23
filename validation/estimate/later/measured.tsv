@@ -1,0 +1,9 @@
+# Peak RSS (MiB), expected and bound at measurement (MiB), seconds and estimated seconds; svr (Threadripper 3970X), Julia 1.13.1, 8 threads, BnGsim 0.33.0-dev after the Fgrm memory fix, host under load (time inflated). Two runs each.
+l_hist4.json	1338.6	1951.0	2536.3	68.2	48.9
+l_hist4.json	1452.6	1951.0	2536.3	84.5	48.9
+l_growth.json	1662.9	1660.7	2158.9	34.6	6.1
+l_growth.json	1533.8	1660.7	2158.9	55.7	6.1
+l_records.json	1550.3	1367.0	1777.1	23.6	4.0
+l_records.json	1585.7	1367.0	1777.1	15.8	4.0
+l_reliability.json	1332.5	1217.1	1582.3	14.8	9.1
+l_reliability.json	1310.2	1217.1	1582.3	22.7	9.1

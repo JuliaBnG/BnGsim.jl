@@ -1,0 +1,64 @@
+{
+  "schema": "bngsim-scenario",
+  "schema_version": 1,
+  "name": "history-qtl",
+  "seed": 2029,
+  "replicates": 6,
+  "steps": 5,
+  "species": {
+    "name": "toy",
+    "chromosome": [
+      50000000,
+      40000000,
+      30000000
+    ]
+  },
+  "founders": {
+    "ne": 300,
+    "nt": 1500,
+    "nid": 150,
+    "histories": 3,
+    "selection": {
+      "nsites": 2000,
+      "da": {
+        "family": "normal",
+        "sd": 0.3
+      },
+      "mu": 2e-05,
+      "sigma_e": 1.0,
+      "fitness": {
+        "model": "stabilizing",
+        "theta": 0.0,
+        "omega2": 1.0
+      }
+    }
+  },
+  "loci": {
+    "qtl": {
+      "from": "history",
+      "maf": 0.01,
+      "nlc": 100,
+      "rho": 0.8
+    },
+    "chip": {
+      "nlc": 1000,
+      "maf": 0.05
+    }
+  },
+  "traits": [
+    {
+      "name": "y",
+      "h2": 0.3
+    }
+  ],
+  "scheme": {
+    "noff": 150,
+    "nsire": 10,
+    "ndam": 60,
+    "evaluation": "gblup",
+    "selection": "ocs",
+    "ocs": "cohort",
+    "delta_F": 0.01,
+    "mating": "min_coancestry"
+  }
+}

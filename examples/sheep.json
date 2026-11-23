@@ -1,0 +1,22 @@
+{
+  "schema": "bngsim-scenario",
+  "schema_version": 1,
+  "name": "sheep",
+  "seed": 2028,
+  "replicates": 3,
+  "steps": 8,
+  "species": {"preset": "Sheep", "interference": 4.3},
+  "founders": {"ne": 500, "nt": 1000, "mr": 1.0, "nid": 400, "herds": 6,
+               "popsize": {"bottleneck": {"size": 100, "start": 900, "duration": 20}}},
+  "loci": {"qtl": {"nlc": 200, "maf": 0.01}, "chip": {"nlc": 2000, "maf": 0.05}},
+  "traits": [
+    {"name": "weight", "h2": 0.35, "c2": 0.1, "da": {"family": "gamma", "shape": 0.4, "sign": "random"}},
+    {"name": "fleece", "h2": 0.4, "age": 1}
+  ],
+  "genetic_correlation": [[1.0, 0.2], [0.2, 1.0]],
+  "scheme": {
+    "noff": 300, "nsire": 15, "ndam": 150, "evaluation": "gblup", "weights": [1.0, 0.5],
+    "max_sire_age": 2, "max_dam_age": 4, "min_dam_age": 1, "max_dam_offspring": 2, "max_sire_offspring": 40,
+    "mating": "min_coancestry", "pair_limit": 2
+  }
+}
