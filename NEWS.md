@@ -1,5 +1,34 @@
 # BnGsim.jl release notes
 
+## v0.32.0 (2026-11-23)
+
+### New
+
+- Reproductive limits (Phase 3), `Scheme` keywords and scenario keys of
+  `scheme`:
+  - `min_sire_age`, `min_dam_age`: the youngest age at which an animal
+    can be a parent (founders, the adult base population, from step 0);
+  - `max_sire_offspring`, `max_dam_offspring`: at most this many
+    offspring per parent and time step, e.g. a litter size or natural
+    service. Offspring numbers, from equal shares or optimum
+    contributions, are capped and the rest spread over the other parents
+    in proportion to their contributions (rounded by largest remainder
+    without passing the cap, ties by id); a scheme whose selected parents
+    cannot have `noff` offspring under the limits is refused, not
+    truncated;
+  - `max_parity`: at most this many time steps with offspring per dam;
+    `pop.parity` counts them.
+- Checks: capped allocations against hand values; in a run, offspring
+  per sire and dam per step within the limits, parity equal to the steps
+  with offspring and within its limit, every non-founder parent at least
+  the minimum age.
+
+### Changed
+
+- The canonical JSON of every scenario lists the five new scheme keys,
+  so its SHA-256 changes; with the defaults the simulation does not
+  (golden checksums unchanged).
+
 ## v0.31.0 (2026-11-23)
 
 ### New
