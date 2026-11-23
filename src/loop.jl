@@ -29,6 +29,22 @@ const _STAGE_RANDOM_SELECTION = 0x0003
 const _STAGE_HERD = 0x0004              # Domain.MATING: a founder's herd
 const _STAGE_CG = 0x0005                # Domain.PHENOTYPE: herd × step effects
 const _STAGE_PAIR_COST = 0x0006         # Domain.MATING: random costs under a pair limit
+const _STAGE_PE = 0x0007                # Domain.PHENOTYPE: permanent environment, at birth
+const _STAGE_RECORD = 0x0008            # Domain.PHENOTYPE: a repeated record, per step
+
+# The repeated records of a population (traits with `records > 1`), one
+# entry per record: animal, trait, time step, value.
+struct RepeatedRecords
+    id::Vector{Int32}
+    trait::Vector{Int32}
+    step::Vector{Int32}
+    y::Vector{Float64}
+end
+RepeatedRecords() = RepeatedRecords(Int32[], Int32[], Int32[], Float64[])
+Base.:(==)(a::RepeatedRecords, b::RepeatedRecords) = a.id == b.id && a.trait == b.trait && a.step == b.step && a.y == b.y
+Base.isequal(a::RepeatedRecords, b::RepeatedRecords) =
+    isequal(a.id, b.id) && isequal(a.trait, b.trait) && isequal(a.step, b.step) && isequal(a.y, b.y)
+Base.hash(a::RepeatedRecords, h::UInt) = hash((a.id, a.trait, a.step, a.y), hash(:RepeatedRecords, h))
 
 """
     Population
@@ -86,6 +102,11 @@ mutable struct Population
     meioses::Vector{Union{Nothing,MeiosisRecord}}
     herd::Vector{Int32}
     σcg::Vector{Float64}
+    nrec::Vector{Int}
+    σpe::Vector{Float64}
+    pe::Matrix{Float64}
+    PE0::Vector{Float64}
+    records::RepeatedRecords
 end
 
 Base.length(pop::Population) = length(pop.sire)
@@ -122,12 +143,24 @@ is born in its dam's herd. A record of trait `j` belongs to the group of
 the animal's herd and the time step of the record (birth plus the trait's
 `age`); each group and trait has an effect ``N(0, \\sigma^2_{cg,j})``, a
 keyed draw per herd and step (`Domain.PHENOTYPE`), added to the
-phenotype, with ``\\sigma^2_{cg,j} = c^2_j(\\sigma^2_{a,j} + \\sigma^2_{e,j})``
-from `c2` (a number for all traits, or one per trait; default `0`, no
-effect). `h^2` stays the heritability within groups,
-``\\sigma^2_a/(\\sigma^2_a + \\sigma^2_e)``. Effects of different traits are
+phenotype, with ``\\sigma^2_{cg,j} = c^2_j V_{p,j}``, ``V_p = \\sigma^2_a/h^2``
+(the variance within groups), from `c2` (a number for all traits, or one
+per trait; default `0`, no effect). `h^2` stays the heritability within
+groups. Effects of different traits are
 independent. When some `c2 > 0`, evaluations fit the groups as fixed
 effects in place of the overall mean (see [`evaluate!`](@ref)).
+
+Repeated records (one trait only): with `records = m > 1`, an animal
+gets a record at every time step it is alive from the trait's `age` on,
+at most `m`, ``y = \\mu + a + pe + cg + e``: a permanent-environment
+effect ``pe`` drawn at birth (keyed, `Domain.PHENOTYPE`) and a temporary
+residual ``e`` drawn per record (keyed by animal and step), with
+``\\sigma^2_{pe} = (r - h^2)V_p`` and ``\\sigma^2_e = (1 - r)V_p`` for the
+`repeatability` ``r`` (default ``h^2``: no permanent environment). The
+records are made at the start of each [`step!`](@ref) (`pop.records`);
+`pop.phenotype` holds the mean of an animal's records so far (`NaN`
+before the first). `pop.R0` is then the temporary residual variance and
+`pop.PE0` the permanent-environment variance of the evaluations.
 
 A trait's `sex` (`0` females, `1` males, `2` both) limits its records to
 one sex; its `age`, a whole number of time steps, is the age at which a
@@ -137,8 +170,8 @@ stream, so these settings change which records are seen, not the values
 drawn.
 """
 function founder_population(hap::Haplotype, qtl::TraitQTL, trait::Trait, key::SimKey; herds::Integer = 1,
-    c2 = 0.0)
-    _founders(hap, [qtl], Trait[trait], key, ones(1, 1), herds, c2)
+    c2 = 0.0, records::Integer = 1, repeatability = nothing)
+    _founders(hap, [qtl], Trait[trait], key, ones(1, 1), herds, c2, records, repeatability)
 end
 
 function founder_population(hap::Haplotype, qtl::MultiTraitQTL, traits::AbstractVector{<:Trait}, key::SimKey;
@@ -152,11 +185,16 @@ function founder_population(hap::Haplotype, qtl::MultiTraitQTL, traits::Abstract
     size(Rm) == (k, k) && issymmetric(Rm) && all(Rm[j, j] == 1 for j = 1:k) && isposdef(Rm) ||
         throw(ArgumentError("Re must be a $k × $k positive definite correlation matrix"))
     qs = [TraitQTL(qtl.trait_names[j], qtl.loci, qtl.additive[:, j]; intercept = qtl.intercept[j]) for j = 1:k]
-    _founders(hap, qs, Vector{Trait}(traits), key, Rm, herds, c2)
+    _founders(hap, qs, Vector{Trait}(traits), key, Rm, herds, c2, 1, nothing)
 end
 
-function _founders(hap, qs, traits, key, Re, herds, c2)
+function _founders(hap, qs, traits, key, Re, herds, c2, records, repeatability)
     k = length(traits)
+    records >= 1 || throw(ArgumentError("records must be at least 1"))
+    h² = traits[1].h²
+    r = repeatability === nothing ? h² : Float64(repeatability)
+    records == 1 && r != h² && throw(ArgumentError("a repeatability other than h² needs records > 1"))
+    h² <= r < 1 || throw(ArgumentError("the repeatability must lie in [h², 1)"))
     herds >= 1 || throw(ArgumentError("herds must be at least 1"))
     c2v = c2 isa Real ? fill(Float64(c2), k) : Float64.(collect(c2))
     length(c2v) == k && all(x -> 0 <= x < 1, c2v) ||
@@ -169,14 +207,18 @@ function _founders(hap, qs, traits, key, Re, herds, c2)
     n >= 2 || throw(ArgumentError("need at least two founders"))
     G = reduce(hcat, [tbv(hap, q) for q in qs])
     σa = [t.σₐ for t in traits]
-    σe = [t.σₐ * sqrt((1 - t.h²) / t.h²) for t in traits]
+    Vp = [t.σₐ^2 / t.h² for t in traits]
+    # with repeated records, σe is the temporary residual: Vp(1 - r)
+    σe = k == 1 && records > 1 ? [sqrt(Vp[1] * (1 - r))] : [t.σₐ * sqrt((1 - t.h²) / t.h²) for t in traits]
+    σpe = k == 1 && records > 1 ? [sqrt(Vp[1] * (r - h²))] : zeros(k)
     C = length(traits) == 1 ? ones(1, 1) : cor(G)
     Lr = Diagonal(σe) * Matrix(cholesky(Symmetric(Re)).L)
     G0 = σa .* C .* σa'
     R0 = σe .* Re .* σe'
     pop = Population(zeros(Int32, n), zeros(Int32, n), falses(n), zeros(Int32, n), fill(typemax(Int32), n), G,
         fill(NaN, size(G)), fill(NaN, size(G)), Union{Nothing,Haplotype}[hap], [1], Int32.(1:n), qs, traits, Lr, key, G0, R0,
-        Union{Nothing,MeiosisRecord}[], ones(Int32, n), sqrt.(c2v .* (σa .^ 2 .+ σe .^ 2)))
+        Union{Nothing,MeiosisRecord}[], ones(Int32, n), sqrt.(c2v .* Vp),
+        k == 1 ? [Int(records)] : ones(Int, k), σpe, zeros(n, k), σpe .^ 2, RepeatedRecords())
     if herds > 1
         for i = 1:n
             pop.herd[i] = keyed_int(keyed_rng(SimKey(key; generation = 0, domain = Domain.MATING,
@@ -207,7 +249,9 @@ keeps the identity of every animal:
 - per trait `<name>`: `tbv_<name>`, the true genetic value;
   `phenotype_<name>`, the phenotype (`missing` in the sex that does not
   express the trait; it is drawn at birth, and is available to an
-  evaluation only from the trait's `age` on, see [`observed`](@ref));
+  evaluation only from the trait's `age` on, see [`observed`](@ref);
+  with repeated records the mean of the animal's records so far, which
+  are in `pop.records`);
   and `ebv_<name>`, the last evaluation (`missing` before one, and for
   animals outside an evaluation window, see [`Scheme`](@ref)).
 
@@ -296,6 +340,12 @@ function _phenotypes!(pop::Population, ids, g)
             z[j] = randn(rng)
         end
         for j = 1:k
+            if pop.nrec[j] > 1                 # repeated: records come with the steps
+                pop.pe[i, j] = pop.σpe[j] > 0 ? pop.σpe[j] * randn(keyed_rng(SimKey(pop.key; generation = g,
+                    domain = Domain.PHENOTYPE, stage = _STAGE_PE, entity = i))) : 0.0
+                pop.phenotype[i, j] = NaN
+                continue
+            end
             e = 0.0
             for l = 1:j
                 e += pop.Lr[j, l] * z[l]
@@ -306,12 +356,35 @@ function _phenotypes!(pop::Population, ids, g)
     end
 end
 
+# The repeated records of time step g: every animal alive at g that
+# expresses the trait, is at least its age old and has fewer than
+# `records` records (one per step from that age on) gets one, and its
+# phenotype becomes the mean of its records.
+function _record!(pop::Population, g)
+    for j = 1:ntraits(pop)
+        pop.nrec[j] > 1 || continue
+        t = pop.traits[j]
+        a = Int(t.age)
+        for i = 1:length(pop)
+            pop.generation[i] <= g < pop.exit[i] && _expresses(t, pop.male[i]) || continue
+            nth = g - pop.generation[i] - a + 1
+            1 <= nth <= pop.nrec[j] || continue
+            e = pop.Lr[j, j] * randn(keyed_rng(SimKey(pop.key; generation = g, domain = Domain.PHENOTYPE,
+                stage = _STAGE_RECORD, entity = i)))
+            y = t.μ + pop.tbv[i, j] + pop.pe[i, j] + _cg(pop, i, j, g) + e
+            push!(pop.records.id, i); push!(pop.records.trait, j); push!(pop.records.step, g); push!(pop.records.y, y)
+            m = pop.phenotype[i, j]
+            pop.phenotype[i, j] = nth == 1 ? y : m + (y - m) / nth
+        end
+    end
+    return pop
+end
+
 # The effect of the contemporary group of animal i's record of trait j:
 # its herd and the step of the record. All traits' effects of a group come
 # from one keyed stream, trait 1 first.
-function _cg(pop::Population, i, j)
+function _cg(pop::Population, i, j, t = pop.generation[i] + Int(pop.traits[j].age))
     pop.σcg[j] > 0 || return 0.0
-    t = pop.generation[i] + Int(pop.traits[j].age)
     rng = keyed_rng(SimKey(pop.key; generation = t, domain = Domain.PHENOTYPE, stage = _STAGE_CG,
         entity = pop.herd[i]))
     z = 0.0
@@ -323,9 +396,8 @@ end
 
 # The contemporary group of each record of trait j among `ids`: herd and
 # step of the record, numbered 1, 2, … in order of first appearance.
-function _groups(pop::Population, ids, j)
-    a = Int(pop.traits[j].age)
-    keys = [(pop.herd[i], pop.generation[i] + a) for i in ids]
+function _groups(pop::Population, ids, j; steps = pop.generation[ids] .+ Int(pop.traits[j].age))
+    keys = [(pop.herd[i], Int32(s)) for (i, s) in zip(ids, steps)]
     lv = Dict{eltype(keys),Int}()
     return [get!(lv, x, length(lv) + 1) for x in keys]
 end
@@ -674,7 +746,9 @@ function evaluate!(pop::Population, sc::Scheme)
     # trait to be recorded on an animal with a known parent.
     known = (v.sire .> 0) .| (v.dam .> 0)
     do_reml = sc.reml && all(j -> any(view(obs, :, j) .& known), 1:k)
-    if k == 1
+    if k == 1 && pop.nrec[1] > 1
+        m = _evaluate_repeated!(pop, sc, v, Kinv, t, obs, do_reml)
+    elseif k == 1
         rec = findall(view(obs, :, 1))
         y = P[rec, 1]
         X = _fixed(pop, v, rec, 1)
@@ -712,6 +786,38 @@ function evaluate!(pop::Population, sc::Scheme)
     pop.ebv .= NaN
     pop.ebv[v.ids, :] = reshape(x[a:a+k*n-1], n, k)
     return m
+end
+
+# Repeatability model of one trait: y = Xb + Za + Zpe + e over the
+# repeated records of the view's animals made by step t (the window's
+# animals only), Var(a) = σ²a K, Var(pe) = σ²pe I, Var(e) = σ²e I. The
+# permanent environment is fitted when the simulation has one (σpe > 0).
+function _evaluate_repeated!(pop::Population, sc::Scheme, v, Kinv, t, obs, do_reml)
+    R = pop.records
+    keep = [k for k in eachindex(R.id) if R.trait[k] == 1 && R.step[k] <= t && v.row[R.id[k]] > 0 &&
+            obs[v.row[R.id[k]], 1]]
+    ids = Int.(R.id[keep])
+    rows = v.row[ids]
+    n = length(v)
+    y = R.y[keep]
+    X = if _fits_groups(pop)
+        g = _groups(pop, ids, 1; steps = R.step[keep])
+        incidence(g, maximum(g; init = 0))
+    else
+        ones(length(y), 1)
+    end
+    Z = incidence(rows, n)
+    fitpe = pop.σpe[1] > 0
+    effs() = fitpe ? [RandomEffect(Z, Kinv, pop.G0[1, 1]), RandomEffect(Z, I, pop.PE0[1])] :
+             [RandomEffect(Z, Kinv, pop.G0[1, 1])]
+    if do_reml
+        r = reml(y, X, effs(); σ²e = pop.R0[1, 1], tol = 1e-6, maxiter = 100)
+        _converged(r, pop)
+        pop.G0 .= r.G0[1]
+        fitpe && (pop.PE0[1] = r.G0[2][1, 1])
+        pop.R0[1, 1] = r.σ²e
+    end
+    return mme(y, X, effs(); σ²e = pop.R0[1, 1])
 end
 
 function _converged(r, pop)
@@ -947,11 +1053,13 @@ index (`reliability`, and `reliability_<name>` per trait with several
 traits; ``\\sigma^2_a`` of the index ``w'G_0w`` from the base variances
 the evaluation used, `NaN` unless the scheme sets `report_reliability`
 and the evaluation solves mixed-model equations) and the
-variances used by the evaluation, `va` and `ve` (one trait) or
-`va_<name>` and `ve_<name>`.
+variances used by the evaluation, `va` and `ve` (one trait; with
+repeated records also `vpe`, the permanent-environment variance, and
+`ve` the temporary residual) or `va_<name>` and `ve_<name>`.
 """
 function step!(pop::Population, sc::Scheme, mm::MeiosisMap)
     g = current_step(pop)
+    _record!(pop, g)
     w = index_weights(pop, sc)
     m = evaluate!(pop, sc)
     cand = generation_ids(pop, g)
@@ -986,6 +1094,7 @@ function step!(pop::Population, sc::Scheme, mm::MeiosisMap)
     pop.tbv = vcat(pop.tbv, reduce(hcat, [tbv(off, q) for q in pop.qtl]))
     pop.phenotype = vcat(pop.phenotype, fill(NaN, sc.noff, k))
     pop.ebv = vcat(pop.ebv, fill(NaN, sc.noff, k))
+    pop.pe = vcat(pop.pe, zeros(sc.noff, k))
     append!(pop.exit, fill(typemax(Int32), sc.noff))
     push!(pop.blocks, off)
     push!(pop.first, n0 + 1)
@@ -1127,6 +1236,7 @@ _no_accuracy(pop::Population) = (k = ntraits(pop); k == 1 ? (accuracy = NaN,) :
     merge((accuracy = NaN,), NamedTuple{Tuple(Symbol("accuracy_", t.name) for t in pop.traits)}(Tuple(fill(NaN, k)))))
 
 function _vc(pop::Population)
+    ntraits(pop) == 1 && pop.nrec[1] > 1 && return (va = pop.G0[1, 1], vpe = pop.PE0[1], ve = pop.R0[1, 1])
     ntraits(pop) == 1 && return (va = pop.G0[1, 1], ve = pop.R0[1, 1])
     names = Tuple(Symbol(p, t.name) for p in ("va_", "ve_") for t in pop.traits)
     NamedTuple{names}(Tuple([diag(pop.G0); diag(pop.R0)]))

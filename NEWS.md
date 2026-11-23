@@ -1,5 +1,40 @@
 # BnGsim.jl release notes
 
+## v0.26.0 (2026-11-23)
+
+### New
+
+- Repeated records (Phase 2), one trait. `founder_population(...;
+  records, repeatability)` and the scenario keys `traits[].records` (`1`)
+  and `traits[].repeatability` (`null`: `h2`): with `records = m > 1` an
+  animal gets a record at every time step it is alive from the trait's
+  `age` on, at most `m`, y = μ + a + pe + cg + e, with a permanent
+  environment drawn at birth, σ²pe = (r − h²)Vp, and a temporary residual
+  per record, σ²e = (1 − r)Vp (Vp = σ²a/h²). Records are made at the
+  start of each step (`pop.records`); `pop.phenotype` is the mean of an
+  animal's records. PBLUP, GBLUP and ssGBLUP fit the repeatability model
+  (permanent environment as a random effect with I, when r > h²; groups
+  per record when contemporary groups are fitted), and REML estimates
+  σ²a, σ²pe and σ²e; the summary gains `vpe`.
+- Checks: the EBVs equal Henderson's equations of the repeatability
+  model solved densely; every animal has one record per step alive from
+  its age up to the maximum; REML under random selection (h² = 0.2,
+  r = 0.5, 4 records, 60 replicates) gives σ²a 1.020 ± 0.023 (true 1),
+  σ²pe 1.517 ± 0.020 (1.5) and σ²e 2.491 ± 0.009 (2.5); under truncation
+  σ²a 1.014 ± 0.032.
+- Archive: `repeated.csv` (`id, trait, step, value`) for traits with
+  repeated records; `traits.csv` gains `records` and `repeatability`.
+
+### Changed
+
+- With contemporary groups, `σ²cg = c2 · σ²a/h²` (unchanged for single
+  records, where σ²a + σ²e = σ²a/h²).
+- The canonical JSON of every scenario now lists each trait's `records`
+  and `repeatability`, so its SHA-256 changes; with the defaults the
+  simulation does not (golden loop checksum unchanged).
+- New fields of `Population`; run state and checkpoints of earlier
+  versions are refused (as for every version).
+
 ## v0.25.0 (2026-11-23)
 
 ### New

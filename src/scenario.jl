@@ -81,7 +81,10 @@ the others `0`, or from `Normal(0, spike_sd)`). Effects are scaled to
 several traits, only the first keeps it (see [`eqtl`](@ref)). `c2` (`0.0`, in `[0, 1)`): the variance of the contemporary-group
 effects (herd × time step of the record) as a fraction of the founders'
 `sigma_a² + sigma_e²`; `h2` is then the heritability within groups. Any
-`c2 > 0` makes evaluations fit the groups as fixed effects.
+`c2 > 0` makes evaluations fit the groups as fixed effects. `records` (`1`): with
+`m > 1`, an animal gets a record at every time step it is alive from the
+trait's `age` on, at most `m` (one trait only), with permanent
+environment from `repeatability` (`null`: `h2`, none; in `[h2, 1)`).
 
 **`genetic_correlation`**, **`residual_correlation`** (identity): `k × k`
 correlation matrices of `k` traits, as arrays of rows.
@@ -109,7 +112,8 @@ struct Scenario
     chip::Union{Nothing,@NamedTuple{nlc::Int, maf::Float64}}
     overlap::Symbol
     traits::Vector{@NamedTuple{name::String, h2::Float64, sigma_a::Float64, mu::Float64, sex::Int, age::Int,
-        da::@NamedTuple{family::Symbol, a::Float64, b::Float64, c::Float64, sign::Symbol}, c2::Float64}}
+        da::@NamedTuple{family::Symbol, a::Float64, b::Float64, c::Float64, sign::Symbol}, c2::Float64,
+        records::Int, repeatability::Float64}}
     genetic_correlation::Matrix{Float64}
     residual_correlation::Matrix{Float64}
     scheme::NamedTuple
@@ -452,7 +456,7 @@ function _traits(c, d)
     for (i, t) in pairs(v)
         path = "traits[$i]"
         _isobject(t) || (_err!(c, path, "must be an object"); continue)
-        _known!(c, t, path, ["name", "h2", "sigma_a", "mu", "sex", "age", "da", "c2"])
+        _known!(c, t, path, ["name", "h2", "sigma_a", "mu", "sex", "age", "da", "c2", "records", "repeatability"])
         name = _get(c, t, path, "name", :string; check=x -> occursin(r"^[[:alpha:]_\p{L}][\p{L}\p{N}_]*$", x) ?
             nothing : "must be a valid identifier (letters, digits, _; not starting with a digit)")
         h2 = _get(c, t, path, "h2", :float; default=0.25, check=x -> 0 < x <= 1 ? nothing : "must lie in (0, 1]")
@@ -462,11 +466,24 @@ function _traits(c, d)
         age = _get(c, t, path, "age", :int; default=0, check=_nonneg)
         da = _da(c, t, path)
         c2 = _get(c, t, path, "c2", :float; default=0.0, check=x -> 0 <= x < 1 ? nothing : "must lie in [0, 1)")
-        any(isnothing, (name, h2, sa, mu, sex, age, da, c2)) && continue
-        push!(out, (name=name, h2=h2, sigma_a=sa, mu=mu, sex=sex, age=age, da=da, c2=c2))
+        nrec = _get(c, t, path, "records", :int; default=1, check=_positive)
+        rep = _get(c, t, path, "repeatability", :float; default=NaN, nullable=true, null_as=NaN)
+        any(isnothing, (name, h2, sa, mu, sex, age, da, c2, nrec, rep)) && continue
+        rep = isnan(rep) ? h2 : rep
+        if !(h2 <= rep < 1)
+            _err!(c, "$path.repeatability", "must lie in [h2, 1)")
+            continue
+        elseif nrec == 1 && rep != h2
+            _err!(c, "$path.repeatability", "needs records > 1")
+            continue
+        end
+        push!(out, (name=name, h2=h2, sigma_a=sa, mu=mu, sex=sex, age=age, da=da, c2=c2, records=nrec,
+            repeatability=rep))
     end
     names = [t.name for t in out]
     allunique(names) || _err!(c, "traits", "trait names must be unique")
+    length(v) > 1 && any(t -> t.records > 1, out) &&
+        _err!(c, "traits", "repeated records (records > 1) are supported with one trait only")
     length(out) == length(v) || return nothing
     return [t for t in out]
 end
@@ -569,7 +586,7 @@ function scenario_dict(s::Scenario)
             d.family === :laplace ? O("family" => "laplace", "scale" => d.b) :
             O("family" => "spike_slab", "pi" => d.a, "sd" => d.b, "spike_sd" => d.c)
     tr = [O("name" => t.name, "h2" => t.h2, "sigma_a" => t.sigma_a, "mu" => t.mu, "sex" => t.sex, "age" => t.age,
-        "da" => da(t.da), "c2" => t.c2) for t in s.traits]
+        "da" => da(t.da), "c2" => t.c2, "records" => t.records, "repeatability" => t.repeatability) for t in s.traits]
     sc = O()
     for (key, kw, kind, _, _) in _SCHEME_FIELDS
         v = getfield(s.scheme, kw)
@@ -670,7 +687,8 @@ function _setup_replicate(s::Scenario, r::Integer, history)
     qrng = keyed_rng(SimKey(key; domain=Domain.QTL))
     pop = if length(ts) == 1
         founder_population(hap, eqtl(hap, panels[1], ts[1]; rng=qrng), ts[1], key;
-            herds=s.founders.herds, c2=s.traits[1].c2)
+            herds=s.founders.herds, c2=s.traits[1].c2, records=s.traits[1].records,
+            repeatability=s.traits[1].repeatability)
     else
         founder_population(hap, eqtl(hap, panels[1], s.genetic_correlation, ts; rng=qrng), ts, key;
             Re=s.residual_correlation, herds=s.founders.herds, c2=[t.c2 for t in s.traits])

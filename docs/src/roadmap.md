@@ -323,8 +323,11 @@ run. The garbage collector alone moves the peak of one scenario by up to
    herds, offspring in the dam's herd, herd × record-step effects with
    variance `c2` of the founders' `Vp`, fitted as fixed effects by the
    evaluations).
-5. Threshold traits *(done)*, sex-limited traits *(done)*, age-limited and
-   repeated records *(to do)*, missing-record masks.
+5. Threshold traits *(done)*, sex-limited traits *(done)*, age-limited
+   records *(done: a trait's `age`)*, repeated records *(done, 0.26.0: one
+   trait, records per step alive from its age, permanent environment from
+   the repeatability, fitted as a random effect)*, missing-record masks
+   *(to do)*. Multi-trait repeated records *(to do)*.
 6. Founder histories with selection or demography, using the FisherWright
    0.6 `FitnessLoci`/`TraitLoci`, `bottleneck` and `growth`.
 

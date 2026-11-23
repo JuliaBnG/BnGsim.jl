@@ -70,7 +70,7 @@
     write_archive(dir, rep.population, rep.map, rep.species)
     @test readline(joinpath(dir, "pedigree.csv")) == "id,sire,dam,sex,generation,exit,herd"
     tl = readlines(joinpath(dir, "traits.csv"))
-    @test endswith(tl[1], ",c2") && parse(Float64, split(tl[2], ',')[end]) ≈ 0.15
+    @test split(tl[1], ',')[8] == "c2" && parse(Float64, split(tl[2], ',')[8]) ≈ 0.15
     for (k, v) in (("herds", 0), ("c2", 1.0))
         e = JSON.parse(read(MINIMAL, String))
         k == "herds" ? (e["founders"]["herds"] = v) : (e["traits"][1]["c2"] = v)

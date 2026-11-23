@@ -27,8 +27,13 @@ return the files written:
 - `truth.csv`: `id`, then `tbv_<trait>` (the true genetic value) and
   `ebv_<trait>` (the last evaluation, empty if none) for each trait;
 - `traits.csv`: one row per trait: `name, h2, sigma_a, mu, sex, age,
-  intercept, c2` (the constant of its genetic value; the variance of the
-  contemporary-group effects as a fraction of `sigma_a²/h2`);
+  intercept, c2, records, repeatability` (the constant of its genetic
+  value; the variance of the contemporary-group effects as a fraction of
+  `sigma_a²/h2`; the maximum number of records per animal and the
+  repeatability);
+- `repeated.csv` (traits with `records > 1`): `id, trait, step, value`,
+  one row per record made by time step `t`; `records.csv` then holds the
+  mean of an animal's records;
 - `qtl.csv` (if `qtl` is given, the locus indices of the QTL in `vm`):
   `locus, chr, bp`, then the additive effect of one copy of the allele
   coded 1 for each trait;
@@ -79,11 +84,21 @@ function write_archive(dir::AbstractString, pop::Population, vm::VariantMap, sp:
         end
     end
     open(out("traits.csv"), "w") do io
-        println(io, "name,h2,sigma_a,mu,sex,age,intercept,c2")
+        println(io, "name,h2,sigma_a,mu,sex,age,intercept,c2,records,repeatability")
         for (j, (tr, q)) in enumerate(zip(pop.traits, pop.qtl))
-            c2 = pop.σcg[j]^2 * tr.h² / tr.σₐ^2
+            Vp = tr.σₐ^2 / tr.h²
             println(io, tr.name, ',', tr.h², ',', tr.σₐ, ',', tr.μ, ',', tr.sex, ',', tr.age, ',', q.intercept, ',',
-                _csvnum(c2))
+                _csvnum(pop.σcg[j]^2 / Vp), ',', pop.nrec[j], ',', _csvnum(tr.h² + pop.σpe[j]^2 / Vp))
+        end
+    end
+    if any(>(1), pop.nrec)
+        open(out("repeated.csv"), "w") do io
+            println(io, "id,trait,step,value")
+            R = pop.records
+            for k in eachindex(R.id)
+                R.step[k] <= t || continue
+                println(io, R.id[k], ',', names_[R.trait[k]], ',', R.step[k], ',', _csvnum(R.y[k]))
+            end
         end
     end
     bp = chrpos(vm, sp)
