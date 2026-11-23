@@ -41,6 +41,7 @@ include("effects.jl")
 include("groups.jl")
 include("mating.jl")
 include("repeated.jl")
+include("mt-repeated.jl")
 include("signals.jl")
 
 @testset "Aqua" begin

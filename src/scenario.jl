@@ -83,11 +83,16 @@ effects (herd × time step of the record) as a fraction of the founders'
 `sigma_a² + sigma_e²`; `h2` is then the heritability within groups. Any
 `c2 > 0` makes evaluations fit the groups as fixed effects. `records` (`1`): with
 `m > 1`, an animal gets a record at every time step it is alive from the
-trait's `age` on, at most `m` (one trait only), with permanent
-environment from `repeatability` (`null`: `h2`, none; in `[h2, 1)`).
+trait's `age` on, at most `m`, with permanent environment from
+`repeatability` (`null`: `h2`, none; in `[h2, 1)`). Traits with repeated
+and single records can be mixed; see `pe_correlation`.
 
-**`genetic_correlation`**, **`residual_correlation`** (identity): `k × k`
-correlation matrices of `k` traits, as arrays of rows.
+**`genetic_correlation`**, **`residual_correlation`**, **`pe_correlation`**
+(identity): `k × k` correlation matrices of `k` traits, as arrays of rows.
+The residual correlation applies among the records of one animal made at
+the same time step; `pe_correlation` among the permanent-environment
+effects of the traits with repeated records (`repeatability > h2`; its
+other entries are not used).
 
 **`scheme`**: the keywords of [`Scheme`](@ref), in ASCII: `noff`, `nsire`,
 `ndam`, `evaluation`, `selection`, `K`, `lambda`, `kappa`, `ub`, `blend`,
@@ -116,6 +121,7 @@ struct Scenario
         records::Int, repeatability::Float64}}
     genetic_correlation::Matrix{Float64}
     residual_correlation::Matrix{Float64}
+    pe_correlation::Matrix{Float64}
     scheme::NamedTuple
 end
 
@@ -291,7 +297,7 @@ const _SCHEME_FIELDS = [
 ]
 
 const _TOP_KEYS = ["schema", "schema_version", "name", "seed", "replicates", "steps", "species", "founders", "loci",
-    "traits", "genetic_correlation", "residual_correlation", "scheme"]
+    "traits", "genetic_correlation", "residual_correlation", "pe_correlation", "scheme"]
 
 """
     parse_scenario(json::AbstractString) -> Scenario
@@ -362,13 +368,14 @@ function _scenario(c::_Ctx, d)
     lo = _loci(c, _object(c, d, "", "loci"), k)
     G = _correlation(c, d, "genetic_correlation", k)
     R = _correlation(c, d, "residual_correlation", k)
+    P = _correlation(c, d, "pe_correlation", k)
     sc = _scheme(c, _object(c, d, "", "scheme"), k, lo)
 
     if fo !== nothing && traits !== nothing
         fo.nid > k || _err!(c, "founders.nid", "must exceed the number of traits ($k)")
     end
     isempty(c.errors) || return nothing
-    return Scenario(name, seed, reps, steps, sp, fo, lo.qtl, lo.chip, lo.overlap, traits, G, R, sc)
+    return Scenario(name, seed, reps, steps, sp, fo, lo.qtl, lo.chip, lo.overlap, traits, G, R, P, sc)
 end
 
 function _species(c, d)
@@ -482,8 +489,6 @@ function _traits(c, d)
     end
     names = [t.name for t in out]
     allunique(names) || _err!(c, "traits", "trait names must be unique")
-    length(v) > 1 && any(t -> t.records > 1, out) &&
-        _err!(c, "traits", "repeated records (records > 1) are supported with one trait only")
     length(out) == length(v) || return nothing
     return [t for t in out]
 end
@@ -596,7 +601,8 @@ function scenario_dict(s::Scenario)
     return O("schema" => SCENARIO_SCHEMA, "schema_version" => SCENARIO_SCHEMA_VERSION, "name" => s.name,
         "seed" => s.seed, "replicates" => s.replicates, "steps" => s.steps, "species" => sp, "founders" => fo,
         "loci" => lo, "traits" => tr, "genetic_correlation" => _rows(s.genetic_correlation),
-        "residual_correlation" => _rows(s.residual_correlation), "scheme" => sc)
+        "residual_correlation" => _rows(s.residual_correlation), "pe_correlation" => _rows(s.pe_correlation),
+        "scheme" => sc)
 end
 
 """
@@ -691,7 +697,9 @@ function _setup_replicate(s::Scenario, r::Integer, history)
             repeatability=s.traits[1].repeatability)
     else
         founder_population(hap, eqtl(hap, panels[1], s.genetic_correlation, ts; rng=qrng), ts, key;
-            Re=s.residual_correlation, herds=s.founders.herds, c2=[t.c2 for t in s.traits])
+            Re=s.residual_correlation, herds=s.founders.herds, c2=[t.c2 for t in s.traits],
+            records=[t.records for t in s.traits], repeatability=[t.repeatability for t in s.traits],
+            Rpe=s.pe_correlation)
     end
     chip = s.chip === nothing ? Int32[] : Int32.(panels[2].loci)
     sc = Scheme(; s.scheme..., chip=chip)

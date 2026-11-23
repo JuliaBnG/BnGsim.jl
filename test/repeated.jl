@@ -70,7 +70,4 @@ using RelationshipMatrices: ainv
     d2 = JSON.parse(read(MINIMAL, String))
     d2["traits"][1]["repeatability"] = 0.6
     @test_throws ScenarioError parse_scenario(d2)               # needs records > 1
-    d3 = scenario_doc()
-    d3["traits"][1]["records"] = 2
-    @test_throws ScenarioError parse_scenario(d3)               # one trait only
 end
