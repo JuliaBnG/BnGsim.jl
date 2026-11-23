@@ -39,6 +39,7 @@ include("aggregate.jl")
 include("report.jl")
 include("effects.jl")
 include("groups.jl")
+include("mating.jl")
 include("signals.jl")
 
 @testset "Aqua" begin
