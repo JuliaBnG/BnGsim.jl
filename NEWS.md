@@ -1,5 +1,30 @@
 # BnGsim.jl release notes
 
+## v0.28.0 (2026-11-23)
+
+### New
+
+- Missing records (Phase 2). `founder_population(...; missing,
+  unrecorded_herds)` and the scenario keys `traits[].missing` and
+  `traits[].unrecorded_herds` (both `0.0`, in `[0, 1)`): a record is
+  missing at random with probability `missing` (a keyed draw per animal,
+  trait and time step of the record), and a herd never records a trait
+  with probability `unrecorded_herds` (a keyed draw per herd and trait).
+  A missing record is not made; with repeated records the opportunity
+  still counts towards `records`, and `pop.nobs` counts the records made.
+  The masks have their own keyed streams, so the other records keep
+  their values. Evaluations use the records there are; `:phenotype`
+  refuses missing records.
+- Checks: missing fractions at the expected rate (single and repeated
+  records); records not masked equal those of the unmasked population;
+  herd masks constant within a herd.
+
+### Changed
+
+- The canonical JSON of every scenario now lists each trait's `missing`
+  and `unrecorded_herds`, so its SHA-256 changes; with the defaults the
+  simulation does not (golden loop checksum unchanged).
+
 ## v0.27.0 (2026-11-23)
 
 ### New

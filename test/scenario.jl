@@ -39,7 +39,7 @@ end
     @test s.founders == (ne=100, nt=500, mr=1.0, decline=Int[], nid=50, shared_history=true, herds=1)
     @test s.qtl == (nlc=50, maf=0.01) && s.chip === nothing && s.overlap === :disjoint
     @test s.traits[1] == (name="y", h2=0.3, sigma_a=1.0, mu=0.0, sex=2, age=0, da=(family=:normal, a=0.0, b=1.0, c=0.0, sign=:positive), c2=0.0, records=1,
-        repeatability=0.3)
+        repeatability=0.3, missing=0.0, unrecorded_herds=0.0)
     @test s.genetic_correlation == ones(1, 1) && s.residual_correlation == ones(1, 1)
     # Scheme defaults are those of Scheme itself.
     d = Scheme(; noff=50, nsire=5, ndam=20)

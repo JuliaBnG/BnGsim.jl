@@ -85,7 +85,10 @@ effects (herd × time step of the record) as a fraction of the founders'
 `m > 1`, an animal gets a record at every time step it is alive from the
 trait's `age` on, at most `m`, with permanent environment from
 `repeatability` (`null`: `h2`, none; in `[h2, 1)`). Traits with repeated
-and single records can be mixed; see `pe_correlation`.
+and single records can be mixed; see `pe_correlation`. `missing` (`0.0`):
+the probability that a record is missing at random; `unrecorded_herds`
+(`0.0`): the probability that a herd never records the trait (both in
+`[0, 1)`, keyed draws that leave the other records unchanged).
 
 **`genetic_correlation`**, **`residual_correlation`**, **`pe_correlation`**
 (identity): `k × k` correlation matrices of `k` traits, as arrays of rows.
@@ -118,7 +121,7 @@ struct Scenario
     overlap::Symbol
     traits::Vector{@NamedTuple{name::String, h2::Float64, sigma_a::Float64, mu::Float64, sex::Int, age::Int,
         da::@NamedTuple{family::Symbol, a::Float64, b::Float64, c::Float64, sign::Symbol}, c2::Float64,
-        records::Int, repeatability::Float64}}
+        records::Int, repeatability::Float64, missing::Float64, unrecorded_herds::Float64}}
     genetic_correlation::Matrix{Float64}
     residual_correlation::Matrix{Float64}
     pe_correlation::Matrix{Float64}
@@ -463,7 +466,8 @@ function _traits(c, d)
     for (i, t) in pairs(v)
         path = "traits[$i]"
         _isobject(t) || (_err!(c, path, "must be an object"); continue)
-        _known!(c, t, path, ["name", "h2", "sigma_a", "mu", "sex", "age", "da", "c2", "records", "repeatability"])
+        _known!(c, t, path, ["name", "h2", "sigma_a", "mu", "sex", "age", "da", "c2", "records", "repeatability",
+            "missing", "unrecorded_herds"])
         name = _get(c, t, path, "name", :string; check=x -> occursin(r"^[[:alpha:]_\p{L}][\p{L}\p{N}_]*$", x) ?
             nothing : "must be a valid identifier (letters, digits, _; not starting with a digit)")
         h2 = _get(c, t, path, "h2", :float; default=0.25, check=x -> 0 < x <= 1 ? nothing : "must lie in (0, 1]")
@@ -475,7 +479,10 @@ function _traits(c, d)
         c2 = _get(c, t, path, "c2", :float; default=0.0, check=x -> 0 <= x < 1 ? nothing : "must lie in [0, 1)")
         nrec = _get(c, t, path, "records", :int; default=1, check=_positive)
         rep = _get(c, t, path, "repeatability", :float; default=NaN, nullable=true, null_as=NaN)
-        any(isnothing, (name, h2, sa, mu, sex, age, da, c2, nrec, rep)) && continue
+        frac = x -> 0 <= x < 1 ? nothing : "must lie in [0, 1)"
+        pm = _get(c, t, path, "missing", :float; default=0.0, check=frac)
+        hm = _get(c, t, path, "unrecorded_herds", :float; default=0.0, check=frac)
+        any(isnothing, (name, h2, sa, mu, sex, age, da, c2, nrec, rep, pm, hm)) && continue
         rep = isnan(rep) ? h2 : rep
         if !(h2 <= rep < 1)
             _err!(c, "$path.repeatability", "must lie in [h2, 1)")
@@ -485,7 +492,7 @@ function _traits(c, d)
             continue
         end
         push!(out, (name=name, h2=h2, sigma_a=sa, mu=mu, sex=sex, age=age, da=da, c2=c2, records=nrec,
-            repeatability=rep))
+            repeatability=rep, missing=pm, unrecorded_herds=hm))
     end
     names = [t.name for t in out]
     allunique(names) || _err!(c, "traits", "trait names must be unique")
@@ -591,7 +598,8 @@ function scenario_dict(s::Scenario)
             d.family === :laplace ? O("family" => "laplace", "scale" => d.b) :
             O("family" => "spike_slab", "pi" => d.a, "sd" => d.b, "spike_sd" => d.c)
     tr = [O("name" => t.name, "h2" => t.h2, "sigma_a" => t.sigma_a, "mu" => t.mu, "sex" => t.sex, "age" => t.age,
-        "da" => da(t.da), "c2" => t.c2, "records" => t.records, "repeatability" => t.repeatability) for t in s.traits]
+        "da" => da(t.da), "c2" => t.c2, "records" => t.records, "repeatability" => t.repeatability,
+        "missing" => t.missing, "unrecorded_herds" => t.unrecorded_herds) for t in s.traits]
     sc = O()
     for (key, kw, kind, _, _) in _SCHEME_FIELDS
         v = getfield(s.scheme, kw)
@@ -694,12 +702,14 @@ function _setup_replicate(s::Scenario, r::Integer, history)
     pop = if length(ts) == 1
         founder_population(hap, eqtl(hap, panels[1], ts[1]; rng=qrng), ts[1], key;
             herds=s.founders.herds, c2=s.traits[1].c2, records=s.traits[1].records,
-            repeatability=s.traits[1].repeatability)
+            repeatability=s.traits[1].repeatability, missing=s.traits[1].missing,
+            unrecorded_herds=s.traits[1].unrecorded_herds)
     else
         founder_population(hap, eqtl(hap, panels[1], s.genetic_correlation, ts; rng=qrng), ts, key;
             Re=s.residual_correlation, herds=s.founders.herds, c2=[t.c2 for t in s.traits],
             records=[t.records for t in s.traits], repeatability=[t.repeatability for t in s.traits],
-            Rpe=s.pe_correlation)
+            Rpe=s.pe_correlation, missing=[t.missing for t in s.traits],
+            unrecorded_herds=[t.unrecorded_herds for t in s.traits])
     end
     chip = s.chip === nothing ? Int32[] : Int32.(panels[2].loci)
     sc = Scheme(; s.scheme..., chip=chip)
