@@ -9,6 +9,7 @@ using JSON
 using SHA: sha256
 using PrecompileTools: @setup_workload, @compile_workload
 using DataFrames
+using DataStructures: BinaryMinHeap
 using Distributions
 using Random
 using Statistics
@@ -29,6 +30,7 @@ include("reproduction.jl")
 include("meiosis.jl")
 include("pedigree-view.jl")
 include("loop.jl")
+include("mating.jl")
 include("ocs.jl")
 include("traits.jl")
 include("base-populations.jl")
@@ -49,7 +51,7 @@ export FounderPopulation, sample_founder_population
 export provenance
 export SimKey, Domain, keyed_rng, philox4x64, keyed_int, keyed_shuffle!
 export MeiosisMap, MeiosisRecord, make_progeny!, ncrossovers
-export Population, founder_population, Scheme, evaluate!, select_parents, mating_plan, step!, simulate!
+export Population, founder_population, Scheme, evaluate!, select_parents, mating_plan, transport, step!, simulate!
 export generation_summary, ngenerations, generation_ids, current_step, recorded, observed, ntraits, index_weights,
     alive, genotyped, ocs_contributions,
     meioses, founder_segments, segment_inbreeding, irm

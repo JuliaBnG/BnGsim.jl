@@ -28,6 +28,7 @@ const _STAGE_PAIRING = 0x0002
 const _STAGE_RANDOM_SELECTION = 0x0003
 const _STAGE_HERD = 0x0004              # Domain.MATING: a founder's herd
 const _STAGE_CG = 0x0005                # Domain.PHENOTYPE: herd × step effects
+const _STAGE_PAIR_COST = 0x0006         # Domain.MATING: random costs under a pair limit
 
 """
     Population
@@ -347,7 +348,8 @@ end
            K = NaN, λ = 0.0, κ = 0.0, ub = 1.0, chip = Int32[], blend = 0.05,
            max_sire_age = 0, max_dam_age = 0, reml = false, weights = Float64[],
            survival = Float64[], cull_unselected = false, genotyped_cohorts = 0,
-           ocs = :fixed, ΔF = NaN, record_meiosis = false, report_reliability = false)
+           ocs = :fixed, ΔF = NaN, record_meiosis = false, report_reliability = false,
+           mating = :random, pair_limit = 0)
 
 A selection and mating scheme, applied every time step:
 
@@ -410,6 +412,13 @@ A selection and mating scheme, applied every time step:
   the same with the generation interval of the contributions being chosen
   (a per-generation constraint, Sonesson et al. 2000). With discrete
   generations the three coincide;
+- `mating`: how the slots of the selected sires and dams (one per
+  offspring) are paired, see [`mating_plan`](@ref): `:random`,
+  `:min_coancestry` (the pairing of least total coancestry),
+  `:assortative` or `:disassortative` (by the index);
+- `pair_limit`: at most this many offspring per sire–dam pair (`0`: no
+  limit; `1`: no full sibs, a factorial-type design), with `:random` or
+  `:min_coancestry`;
 - `record_meiosis`: keep the crossover records of every cohort in
   `pop.meioses`, for realized IBD from founder segments
   ([`founder_segments`](@ref)); about 8 bytes per crossover;
@@ -485,9 +494,16 @@ Base.@kwdef struct Scheme
     ancestor_generations::Int = typemax(Int)
     retain::Symbol = :all
     report_reliability::Bool = false
+    mating::Symbol = :random
+    pair_limit::Int = 0
     function Scheme(noff, nsire, ndam, evaluation, selection, K, λ, κ, ub, chip, blend,
         max_sire_age, max_dam_age, reml, weights, survival, cull_unselected, genotyped_cohorts, ocs, ΔF,
-        record_meiosis, window, ancestor_generations, retain, report_reliability)
+        record_meiosis, window, ancestor_generations, retain, report_reliability, mating, pair_limit)
+        mating in (:random, :min_coancestry, :assortative, :disassortative) ||
+            throw(ArgumentError("mating must be :random, :min_coancestry, :assortative or :disassortative"))
+        pair_limit >= 0 || throw(ArgumentError("pair_limit must be non-negative"))
+        pair_limit > 0 && mating in (:assortative, :disassortative) &&
+            throw(ArgumentError("pair_limit applies to :random and :min_coancestry mating"))
         noff > 1 && nsire > 0 && ndam > 0 || throw(ArgumentError("noff > 1, nsire > 0 and ndam > 0 are required"))
         max_sire_age >= 0 && max_dam_age >= 0 || throw(ArgumentError("maximum ages must be non-negative"))
         reml && !(evaluation in (:pblup, :gblup, :ssgblup)) &&
@@ -521,7 +537,7 @@ Base.@kwdef struct Scheme
         new(noff, nsire, ndam, evaluation, selection, K, λ, κ, ub, Int32.(chip), blend,
             max_sire_age, max_dam_age, reml, Float64.(weights), Float64.(survival), cull_unselected,
             genotyped_cohorts, ocs, ΔF, record_meiosis, window, ancestor_generations, retain,
-            report_reliability)
+            report_reliability, mating, pair_limit)
     end
 end
 
@@ -845,18 +861,70 @@ function _random_criterion(pop::Population, g, cand)
 end
 
 """
-    mating_plan(pop, sires, nsire_off, dams, ndam_off) -> Matrix{Int}
+    mating_plan(pop, sires, nsire_off, dams, ndam_off; mating = :random, pair_limit = 0, index = nothing)
+        -> Matrix{Int}
 
-Pair sire and dam slots at random (a keyed shuffle of the dam slots,
-`Domain.MATING`): row `i` is mating `i`, as ids.
+Pair the slots of the sires `sires` (`nsire_off[k]` offspring each) and
+the dams `dams` (`ndam_off[k]`): row `i` is mating `i`, as ids. Every
+parent keeps its number of offspring.
+
+- `:random`: a keyed shuffle of the dam slots (`Domain.MATING`). With
+  `pair_limit > 0`, the pairing of least total cost under the limit, with
+  a keyed uniform cost per sire–dam pair: random, but not uniform over
+  the pairings that meet the limit.
+- `:min_coancestry`: the pairing of least total coancestry
+  ``\\sum \\theta_{sd}`` (from the pedigree, ``\\theta = A/2``), exactly
+  ([`transport`](@ref)); the mean coancestry of the matings is the
+  expected inbreeding of the offspring.
+- `:assortative`: sire slots by descending `index`, paired with dam slots
+  by descending `index` (best with best); `:disassortative`: with dam
+  slots by ascending `index`. Ties by ascending id.
+
+`pair_limit > 0` allows at most that many offspring per sire–dam pair
+(`:random`, `:min_coancestry`); an `ArgumentError` when no pairing meets
+it. Rows of the pairings by cost are ordered by sire, then dam.
+
+The numbers of offspring come from [`select_parents`](@ref), so a policy
+applies to any selection: with `:ocs` or `:rocs`, the optimised
+contributions fix each parent's offspring and `mating` pairs them (two
+stages, contributions then mate allocation; not a joint optimisation of
+both). Minimum-coancestry mating lowers the inbreeding of the offspring
+below the coancestry of the contributions in the short term; the
+asymptotic rate of inbreeding is set by the contributions.
 """
-function mating_plan(pop::Population, s, ns, d, nd)
+function mating_plan(pop::Population, s, ns, d, nd; mating::Symbol = :random, pair_limit::Integer = 0,
+    index = nothing)
     sum(ns) == sum(nd) || throw(ArgumentError("sire and dam slots differ: $(sum(ns)) and $(sum(nd))"))
-    sl = reduce(vcat, [fill(Int(s[k]), ns[k]) for k in eachindex(s)])
-    dl = reduce(vcat, [fill(Int(d[k]), nd[k]) for k in eachindex(d)])
     g = current_step(pop)
-    keyed_shuffle!(keyed_rng(SimKey(pop.key; generation = g, domain = Domain.MATING, stage = _STAGE_PAIRING)), dl)
-    return hcat(sl, dl)
+    if mating == :random && pair_limit == 0
+        sl = reduce(vcat, [fill(Int(s[k]), ns[k]) for k in eachindex(s)])
+        dl = reduce(vcat, [fill(Int(d[k]), nd[k]) for k in eachindex(d)])
+        keyed_shuffle!(keyed_rng(SimKey(pop.key; generation = g, domain = Domain.MATING, stage = _STAGE_PAIRING)), dl)
+        return hcat(sl, dl)
+    elseif mating in (:assortative, :disassortative)
+        index === nothing && throw(ArgumentError(":$mating mating needs the index"))
+        pair_limit == 0 || throw(ArgumentError("pair_limit applies to :random and :min_coancestry mating"))
+        os = sortperm(collect(zip(-index[s], s)))
+        od = mating == :assortative ? sortperm(collect(zip(-index[d], d))) : sortperm(collect(zip(index[d], d)))
+        sl = reduce(vcat, [fill(Int(s[k]), ns[k]) for k in os])
+        dl = reduce(vcat, [fill(Int(d[k]), nd[k]) for k in od])
+        return hcat(sl, dl)
+    end
+    C = if mating == :min_coancestry
+        A = nrm(pop.sire, pop.dam, [s; d])
+        A[1:length(s), length(s)+1:end] ./ 2
+    elseif mating == :random
+        reduce(vcat, [begin
+            rng = keyed_rng(SimKey(pop.key; generation = g, domain = Domain.MATING, stage = _STAGE_PAIR_COST,
+                entity = Int(i)))
+            rand(rng, length(d))'
+        end for i in s])
+    else
+        throw(ArgumentError("mating must be :random, :min_coancestry, :assortative or :disassortative"))
+    end
+    F = transport(ns, nd, C; cap = pair_limit > 0 ? pair_limit : typemax(Int))
+    rows = [(Int(s[a]), Int(d[b])) for a in eachindex(s) for b in eachindex(d) for _ = 1:F[a, b]]
+    return [first.(rows) last.(rows)]
 end
 
 # ---- one generation ----------------------------------------------------
@@ -890,7 +958,7 @@ function step!(pop::Population, sc::Scheme, mm::MeiosisMap)
     acc = merge(_accuracies(pop, cand, w), _reliabilities(pop, sc, m, cand, w))
     elig = _eligible(pop, sc, g)
     s, ns, d, nd, info = select_parents(pop, sc, m)
-    plan = mating_plan(pop, s, ns, d, nd)
+    plan = mating_plan(pop, s, ns, d, nd; mating = sc.mating, pair_limit = sc.pair_limit, index = pop.ebv * w)
     L = mean(g + 1 .- pop.generation[plan])
     ints = _intensities(pop.ebv * w, elig, plan)
     _cull_and_survive!(pop, sc, g, [s; d])

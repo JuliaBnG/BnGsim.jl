@@ -1,5 +1,37 @@
 # BnGsim.jl release notes
 
+## v0.25.0 (2026-11-23)
+
+### New
+
+- Mating policies (Phase 3). `Scheme(; mating, pair_limit)`, scenario
+  keys `scheme.mating` and `scheme.pair_limit`: `:random` (default, as
+  before), `:min_coancestry` (the pairing of the selected sire and dam
+  slots with least total coancestry), `:assortative` and
+  `:disassortative` (by the index); `pair_limit` caps the offspring per
+  sire–dam pair (`1`: no full sibs) with `:random` or `:min_coancestry`.
+  Every parent keeps the number of offspring its selection gave it, so
+  the policies combine with any selection, OCS included (contributions,
+  then mate allocation).
+- `transport(supply, demand, cost; cap)`: the exact minimum-cost
+  transportation problem (successive shortest paths with potentials;
+  deterministic ties), matching brute force on 300 random small cases.
+- Checks over 60 replicates (100 offspring, 10 sires, 50 dams, PBLUP
+  truncation, 8 steps): minimum-coancestry mating gives F 0.000, 0.004,
+  0.021 at steps 2–4 against 0.013, 0.029, 0.046 at random, and
+  0.087 ± 0.001 against 0.109 ± 0.001 at step 8, with the same
+  asymptotic ΔF (0.017 per step) and gain (3.09 ± 0.08 against
+  3.07 ± 0.09). With OCS (per cohort, ΔF = 0.01) it gives 0.046 against
+  0.069 at step 8, for the same constrained kinship of the contributions.
+- New dependency: DataStructures (a binary heap; already in the manifest
+  through DataFrames).
+
+### Changed
+
+- The canonical JSON of every scenario now lists `mating` and
+  `pair_limit`, so its SHA-256 changes; with the defaults the simulation
+  does not.
+
 ## v0.24.0 (2026-11-23)
 
 ### New

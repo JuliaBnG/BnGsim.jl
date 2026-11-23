@@ -338,8 +338,12 @@ neutral SFS matches its expectation.
    sex-specific maps.
 2. Demography: age classes, parity, survival, reproductive limits, culling,
    and discrete or overlapping generations.
-3. Mating: random *(done)*, assortative/disassortative, minimum-coancestry,
-   factorial, fixed-progeny.
+3. Mating: random, assortative/disassortative, minimum-coancestry and a
+   limit per sire–dam pair (factorial-type with limit 1) *(done, 0.25.0:
+   `mating`, `pair_limit`; minimum-cost pairings solved exactly by
+   `transport`)*. Fixed progeny per dam is the equal allocation of
+   truncation selection. Joint mate selection (contributions and pairs
+   optimised together) *(not planned yet)*.
 4. Strict validation that parents are appended before offspring.
 
 **Gate:** crossover counts match the map length in Morgans. Parent–offspring
