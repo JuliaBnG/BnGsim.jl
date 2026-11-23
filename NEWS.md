@@ -1,5 +1,37 @@
 # BnGsim.jl release notes
 
+## v0.27.0 (2026-11-23)
+
+### New
+
+- Repeated records of several traits (e.g. methane emission with growth
+  traits). `founder_population(...; records, repeatability, Rpe)` take one
+  value per trait, and the scenario key `pe_correlation` (identity) gives
+  the correlation of the permanent environments among the traits with
+  repeated records; traits with single and repeated records can be mixed.
+  The temporary residuals of the records an animal gets at one step are
+  drawn jointly, with the residual correlation; records at different
+  steps are independent. PBLUP, GBLUP and ssGBLUP fit the multi-trait
+  repeatability model: one row per record unit (animal and step), the
+  animal effect G₀ ⊗ K, the permanent environment P₀ ⊗ I over the
+  repeated traits, R₀ among the records of a unit (missing records
+  exact), contemporary groups per record; REML estimates G₀, P₀ and R₀.
+  The summary gains `vpe_<trait>` for the repeated traits.
+- Checks: the EBVs equal Henderson's equations solved densely (three
+  traits: 3, 2 and 1 records, permanent environment on two, groups); the
+  simulated permanent environments and same-step residuals have the
+  specified correlations; REML under random selection (two traits, 3
+  and 2 records, 100 replicates) recovers all nine components within
+  1.2 SE, e.g. P₀ 1.410 ± 0.015, 0.662 ± 0.013, 0.386 ± 0.009 (true
+  1.400, 0.667, 0.386) and R₀[1,2] 0.484 ± 0.005 (0.490).
+
+### Changed
+
+- `pop.PE0` is a matrix (traits × traits).
+- The canonical JSON of every scenario now lists `pe_correlation`, so
+  its SHA-256 changes; results do not (single-trait repeated runs
+  checked byte for byte against 0.26.0, the golden loop unchanged).
+
 ## v0.26.0 (2026-11-23)
 
 ### New
