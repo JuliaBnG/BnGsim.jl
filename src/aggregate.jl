@@ -1,12 +1,14 @@
 # Aggregation of replicates (docs/src/roadmap.md, Phase 5): per time step,
 # the mean, standard deviation and standard error of every summary over
-# replicates, with the change per step of the genetic means and the rate of
-# inbreeding. The result does not depend on the order in which replicates
+# replicates, with the change per step of the genetic means, the rates of
+# inbreeding and the depletion of the genetic variance. The result does not depend on the order in which replicates
 # finished or were merged: the rows are sorted by replicate first.
 
 # The changes per step derived within each replicate: `dG` for `mean` (the
 # index) and `dG_<trait>` for `mean_<trait>`; `dF`, the rate of inbreeding
-# (F_t - F_{t-1}) / (1 - F_{t-1}). NaN at a replicate's first step.
+# (F_t - F_{t-1}) / (1 - F_{t-1}), and `dFhet` the same of `Fhet`; NaN at
+# a replicate's first step. `var_ratio` and `genic_ratio`: `var` and
+# `genic` relative to the replicate's first step.
 function _with_changes(df::DataFrame)
     d = sort(df, [:replicate, :generation])
     means = [c for c in names(d) if c == "mean" || startswith(c, "mean_")]
@@ -15,9 +17,16 @@ function _with_changes(df::DataFrame)
         x = Float64.(d[!, c])
         d[!, replace(c, "mean" => "dG"; count=1)] = [starts[i] ? NaN : x[i] - x[i-1] for i = 1:nrow(d)]
     end
-    if "F" in names(d)
-        F = Float64.(d.F)
-        d[!, :dF] = [starts[i] ? NaN : (F[i] - F[i-1]) / (1 - F[i-1]) for i = 1:nrow(d)]
+    for (c, r) in (("F", :dF), ("Fhet", :dFhet))
+        c in names(d) || continue
+        F = Float64.(d[!, c])
+        d[!, r] = [starts[i] ? NaN : (F[i] - F[i-1]) / (1 - F[i-1]) for i = 1:nrow(d)]
+    end
+    first_row = accumulate((j, i) -> starts[i] ? i : j, 1:nrow(d); init = 1)
+    for c in ("var", "genic")
+        c in names(d) || continue
+        x = Float64.(d[!, c])
+        d[!, c*"_ratio"] = x ./ x[first_row]
     end
     return d
 end
@@ -33,7 +42,13 @@ and for every other column `c` of the summary `c_mean`, `c_sd` (with the
 values left out (`n` then counts the others). Also aggregated are the
 changes per step within each replicate: `dG` (of `mean`, the index of
 the traits) and `dG_<trait>` (of `mean_<trait>`) for the genetic means,
-and `dF`, the rate of inbreeding ``(F_t - F_{t-1})/(1 - F_{t-1})``.
+`dF`, the rate of inbreeding ``(F_t - F_{t-1})/(1 - F_{t-1})``, and
+`dFhet`, the same rate of the loss of heterozygosity `Fhet`; and the
+depletion of the genetic variance within each replicate, `var_ratio` and
+`genic_ratio`, the variance and the genic variance relative to the
+replicate's first step (with selection, `genic_ratio` falls with allele
+frequencies changing at the QTL, and `var_ratio` below it with the
+negative disequilibrium of the Bulmer effect).
 
 The rows are sorted by replicate before summing, so the result is the
 same, to the bit, whatever the order of the replicates in `summary`.
