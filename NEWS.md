@@ -1,5 +1,32 @@
 # BnGsim.jl release notes
 
+## v0.23.0 (2026-11-23)
+
+### New
+
+- QTL effect distributions (Phase 2). Scenario families for `traits[].da`:
+  `"laplace"` (`scale`), `"gamma"` with `"sign": "random"` (effects of
+  either sign, as in Meuwissen, Hayes and Goddard 2001) and
+  `"spike_slab"` (`pi`, `sd`, `spike_sd`: a fraction `pi` of the effects
+  from `Normal(0, sd)`, the others exactly `0`, or from
+  `Normal(0, spike_sd)`). The samplers `RandomSign(d)` and
+  `SpikeSlab(π, sd; spike_sd)` are exported for the Julia API (`rand`,
+  `mean`, `var` only). `eqtl` only rescales the draws of a single trait,
+  so zeros and signs are kept (tested); with several traits only the
+  first keeps the shape, as before.
+
+### Changed
+
+- The canonical form of a `"gamma"` effect distribution now includes
+  `"sign": "positive"`, so the canonical JSON (and its SHA-256 in the
+  provenance) of such scenarios changes; the simulation does not.
+- `:random` selection draws its keyed uniforms for the eligible
+  candidates only, not for every animal ever born; the values, keyed by
+  id, and so the runs are unchanged (checked byte for byte against
+  0.22.0).
+- Removal of animals' records from the store is no longer planned (see
+  the package roadmap).
+
 ## v0.22.0 (2026-11-23)
 
 ### New

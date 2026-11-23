@@ -81,7 +81,7 @@ here.
 | Aggregation | `aggregate.csv` from every run and `bngsim merge` (0.19.0): per step, mean, SD and SE over replicates of every summary and of the per-step gain (`dG`) and rate of inbreeding (`dF`); runs of disjoint replicates (on several hosts) merge into the bytes of one run, whatever the order. Tier 1 summaries stay CSV (no Parquet dependency). |
 | Reports | (0.21.0) per cohort, the QTL at which the favourable allele is segregating, fixed or lost (`qtl_seg`, `qtl_fixed`, `qtl_lost`), and the realized selection intensity of each sex (`intensity_sire`, `intensity_dam`: the parents' mean index weighted by offspring, less the eligible candidates' mean, in their SDs); in `aggregate.csv`, variance depletion (`var_ratio`, `genic_ratio`, relative to the first step) and `dFhet`. Already reported: ΔG, accuracy, generation interval, pedigree F and coancestry, `Fhet`, realized IBD (`Fseg`). 0.22.0 completes the list: `Fgrm` (VanRaden G with founder frequencies; E ≈ F − (1 − F)/(2n₀ − 1) without selection, checked over 200 replicates) and, with `report_reliability`, the candidates' mean reliability 1 − PEV/σ²a from the MME (solved in chunks of 64 candidates; checked against a dense inverse). |
 | Signals | SIGINT and SIGTERM to `bin/bngsim` (0.20.0) create `DIR/CANCEL`, so the run stops at the next step boundary with its state saved (exit code 7); before any state exists, or on a second signal, Julia is stopped at once. Handled by the launcher, not by Julia, whose delivery of interrupts to threaded tasks differs between versions. Resumed runs are byte-identical. |
-| Not started | removal of animals' records from the store (ids stay rows of the store; `PedigreeView` is the boundary once they do not). Genomes are dropped once unusable (`retain = :active`, 0.12.0). |
+| Not planned | removal of animals' records from the store (decided 2026-11-23): a record is about 20 + 24k bytes (k traits), 44 MB per million animals with one trait, while genomes, the large part, are already dropped once unusable (`retain = :active`, 0.12.0); pedigree `F` and coancestry need every ancestor anyway. Ids stay rows of the store. Per-step work over the whole store is kept to cheap passes (0.23.0: `:random` selection draws only for eligible candidates, same values). |
 
 The breeding loop is keyed by coordinate (§4.2): meiosis, sexes,
 phenotypes, random selection and pairing each draw from their own
@@ -315,8 +315,9 @@ run. The garbage collector alone moves the peak of one scenario by up to
    computes most of these.
 2. Chip `LocusSet`s and QTL architectures in one `VariantMap`.
    *Done:* `sample_loci`, `eqtl`.
-3. QTL effect distributions: Gaussian *(done)*; Gamma, Laplace and
-   spike-and-slab *(to do)*.
+3. QTL effect distributions: Gaussian, Gamma, Laplace, Gamma with random
+   sign, spike-and-slab *(done, 0.23.0: scenario families and the
+   samplers `RandomSign`, `SpikeSlab`)*.
 4. Phenotypes: TBV plus fixed/contemporary-group effects plus correlated
    residuals. *Done:* correlated residuals. *To do:* contemporary groups.
 5. Threshold traits *(done)*, sex-limited traits *(done)*, age-limited and
