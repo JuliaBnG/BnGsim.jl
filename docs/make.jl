@@ -20,6 +20,7 @@ makedocs(
         "Scenarios" => "scenarios.md",
         "Command line" => "cli.md",
         "Resource estimate" => "estimate.md",
+        "Output files" => "outputs.md",
         "Archives" => "archive.md",
         "Upstream contract" => "upstream-contract.md",
         "Relationships: A, G and IBD" => "relationships.md",

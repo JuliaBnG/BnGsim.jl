@@ -59,7 +59,7 @@ export save_checkpoint, load_checkpoint
 export founder_haplotypes
 export ld_decay, founder_summary
 export Scenario, ScenarioError, read_scenario, parse_scenario, validate_scenario, write_scenario, scenario_json,
-    scenario_dict, run_scenario, run_replicate
+    scenario_dict, results_dict, results_sha256, run_scenario, run_replicate
 export cli, ExitCode
 export resource_estimate, ScenarioSize
 export write_archive, infinitesimal

@@ -495,6 +495,10 @@ function _founders(c, d)
     end
     pd !== nothing && popsize === nothing && return nothing
     sd !== nothing && selection === nothing && return nothing
+    # a bottleneck recovers to ne unless told otherwise: stored as such, so
+    # that the scenario with and without `"recovery": ne` is the same
+    popsize !== nothing && popsize.model === :bottleneck && popsize.recovery == 0 &&
+        (popsize = merge(popsize, (recovery=ne,)))
     last = !isempty(decline) ? decline[end] : popsize === nothing ? ne : _trajectory(popsize, ne)(nt)
     nid <= last || (_err!(c, "$path.nid", "exceeds the $last individuals of the last historical generation");
         return nothing)
@@ -745,7 +749,7 @@ function scenario_dict(s::Scenario)
         "shared_history" => f.shared_history, "herds" => f.herds,
         "popsize" => f.popsize === nothing ? nothing : f.popsize.model === :bottleneck ?
             O("bottleneck" => O("size" => f.popsize.size, "start" => f.popsize.start, "duration" => f.popsize.duration,
-                "recovery" => f.popsize.recovery == 0 ? f.ne : f.popsize.recovery)) :
+                "recovery" => f.popsize.recovery)) :
             O("growth" => O("rate" => f.popsize.rate, "start" => f.popsize.start,
                 "limit" => f.popsize.limit == 0 ? nothing : f.popsize.limit)),
         "sexratio" => isnan(f.sexratio) ? nothing : f.sexratio,
@@ -784,6 +788,84 @@ Reading it back gives a scenario equal to `s`, and writing that gives the
 same text.
 """
 scenario_json(s::Scenario) = JSON.json(scenario_dict(s); pretty=2) * "\n"
+
+"""
+    results_dict(s::Scenario) -> JSON object
+
+The content of `s` that determines its results, and its SHA-256 (of the
+compact JSON text, [`results_sha256`](@ref)): the canonical object
+([`scenario_dict`](@ref))
+without the keys that do not change any replicate's results (`schema`,
+`schema_version`, `name`, `replicates`, `founders.history_dir`) and
+without every key whose value is its default, so that a key added in a
+later release with a default that keeps earlier results leaves the hash
+of every earlier scenario unchanged (schema policy, package roadmap §11
+b). A key is left out when the scenario read without it is equal to `s`;
+a default that depends on other keys (a bottleneck's `recovery`, `ne`
+by default) is recognised as such.
+
+Two scenarios with the same `results_sha256` give the same summaries
+replicate by replicate with the same BnGsim version; `bngsim merge`
+accepts runs whose scenarios agree on it. The `scenario_sha256` of the
+provenance identifies the canonical text itself.
+"""
+function results_dict(s::Scenario)
+    d = scenario_dict(s)
+    _prune_defaults!(d, d, Any[], s)
+    parse_scenario(d) == s || error("results_dict: the pruned scenario differs from the scenario (a bug)")
+    for k in ("schema", "schema_version", "name", "replicates")
+        delete!(d, k)
+    end
+    haskey(d, "founders") && delete!(d["founders"], "history_dir")
+    return d
+end
+
+"""
+    results_sha256(s::Scenario) -> String
+
+The SHA-256 of the compact JSON text of [`results_dict`](@ref)`(s)`: equal
+for scenarios that differ only in keys that do not change results or in
+keys at their defaults.
+"""
+results_sha256(s::Scenario) = bytes2hex(sha256(JSON.json(results_dict(s))))
+
+# Remove, top-down, every key of `x` (at `path` in the whole object `root`)
+# without which `root` reads as `s`. Required keys are kept (reading
+# fails); objects that stay are pruned within, as are the objects of an
+# array (the traits).
+function _prune_defaults!(root, x, path, s)
+    if x isa AbstractDict
+        for k in collect(keys(x))
+            c = _without(root, [path; k])
+            same = try
+                parse_scenario(c) == s
+            catch e
+                e isa ScenarioError || rethrow()
+                false
+            end
+            if same
+                delete!(x, k)
+            else
+                _prune_defaults!(root, x[k], [path; k], s)
+            end
+        end
+    elseif x isa AbstractVector
+        for (i, v) in enumerate(x)
+            v isa AbstractDict && _prune_defaults!(root, v, [path; i], s)
+        end
+    end
+    return x
+end
+
+function _without(root, path)
+    c = deepcopy(root)
+    y = c
+    for p in path[1:end-1]
+        y = y[p]
+    end
+    delete!(y, path[end])
+    return c
+end
 
 """
     write_scenario(path, s::Scenario)

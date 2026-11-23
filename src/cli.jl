@@ -5,6 +5,11 @@
 
 const CLI_INTERFACE_VERSION = 1
 
+# The version of the output files (summary.csv, aggregate.csv, the
+# archives, the history directory; docs/src/outputs.md). Columns are only
+# appended at the end of a table within a version.
+const OUTPUTS_VERSION = 1
+
 """
     ExitCode
 
@@ -85,7 +90,8 @@ end
 function _version_info()
     O = JSON.Object{String,Any}
     return O("bngsim" => string(pkgversion(BnGsim)), "cli_interface" => CLI_INTERFACE_VERSION,
-        "scenario_schema" => SCENARIO_SCHEMA_VERSION, "julia" => string(VERSION),
+        "scenario_schema" => SCENARIO_SCHEMA_VERSION, "outputs_version" => OUTPUTS_VERSION,
+        "julia" => string(VERSION),
         "packages" => _package_versions(), "manifest_sha256" => _manifest_sha256())
 end
 
@@ -128,8 +134,9 @@ code ([`ExitCode`](@ref)). `bin/bngsim` calls it as
   With `--archive none|chip|qtl|all`, an archive of each replicate
   ([`write_archive`](@ref)) is written to `DIR/archive/r<N>/` when it
   finishes, and listed in `provenance.json`.
-- `merge DIR... --out OUT`: combine completed runs of the same scenario with
-  disjoint replicates (e.g. split over hosts with `--replicates`) into
+- `merge DIR... --out OUT`: combine completed runs of the same scenario
+  (equal [`results_sha256`](@ref)) with disjoint replicates (e.g. split
+  over hosts with `--replicates`) into
   `OUT`: `scenario.json`, `summary.csv` (rows ordered by replicate, the
   bytes of a single run of all of them), `aggregate.csv` and
   `provenance.json` listing the runs merged.
@@ -151,7 +158,9 @@ code ([`ExitCode`](@ref)). `bin/bngsim` calls it as
 `summary.csv` depends only on the scenario, the replicates and the
 package versions: not on the number of threads or the host.
 `provenance.json` records the rest of the run (roadmap invariant I2): the
-canonical scenario and its SHA-256, the versions and manifest hash, the
+canonical scenario, its SHA-256 and its `results_sha256`, the versions
+(with `outputs_version`, see the documentation page "Output files") and
+manifest hash, the
 host, CPU, threads, start and end times, and the SHA-256 of each output.
 """
 function cli(args::AbstractVector{<:AbstractString}; stdout::IO=Base.stdout, stderr::IO=Base.stderr)
@@ -247,7 +256,7 @@ function _cli_validate(args, stdout, stderr)
     j = scenario_json(s)
     _emit(stdout, JSON.Object{String,Any}("status" => "valid", "scenario" => s.name,
         "schema_version" => SCENARIO_SCHEMA_VERSION, "scenario_sha256" => _sha256(j),
-        "replicates" => s.replicates, "steps" => s.steps))
+        "results_sha256" => results_sha256(s), "replicates" => s.replicates, "steps" => s.steps))
     return ExitCode.OK
 end
 
@@ -407,10 +416,12 @@ function _drive(out, s, run, stdout, stderr; created, should_stop=(r, g) -> _can
     open(io -> _write_csv(io, df), joinpath(out, "summary.csv"), "w")
     open(io -> _write_csv(io, aggregate(df)), joinpath(out, "aggregate.csv"), "w")
     hashes = O(f => _sha256_file(joinpath(out, f)) for f in files)
+    rsha = results_sha256(s)
     seconds = round(sum(x -> x["seconds"], sessions); digits=3)
     prov = O("bngsim" => string(pkgversion(BnGsim)), "cli_interface" => CLI_INTERFACE_VERSION,
-        "scenario_schema" => SCENARIO_SCHEMA_VERSION, "scenario_sha256" => _sha256(j),
-        "scenario" => scenario_dict(s), "seed" => s.seed, "replicates" => reps,
+        "scenario_schema" => SCENARIO_SCHEMA_VERSION, "outputs_version" => OUTPUTS_VERSION,
+        "scenario_sha256" => _sha256(j), "results_sha256" => rsha, "scenario" => scenario_dict(s),
+        "seed" => s.seed, "replicates" => reps,
         "julia" => string(VERSION), "packages" => _package_versions(), "manifest_sha256" => _manifest_sha256(),
         "os" => string(Sys.KERNEL, " ", Sys.MACHINE), "cpu" => Sys.cpu_info()[1].model, "host" => gethostname(),
         "threads" => Threads.nthreads(), "started" => sessions[1]["started"], "finished" => session["finished"],
@@ -428,7 +439,8 @@ function _drive(out, s, run, stdout, stderr; created, should_stop=(r, g) -> _can
     open(io -> _emit(io, prov), joinpath(out, "provenance.json"), "w")
     rm(st; recursive=true)
     rm(joinpath(out, "CANCEL"); force=true)
-    _emit(stdout, O("status" => "completed", "scenario_sha256" => _sha256(j), "replicates" => reps,
+    _emit(stdout, O("status" => "completed", "scenario_sha256" => _sha256(j), "results_sha256" => rsha,
+        "replicates" => reps,
         "outputs" => [joinpath(out, f) for f in [files; "provenance.json"]], "seconds" => seconds,
         "sessions" => length(sessions)))
     return ExitCode.OK
@@ -452,6 +464,7 @@ function _cli_estimate(args, stdout, stderr)
     z = e.size
     O = JSON.Object{String,Any}
     _emit(stdout, O("status" => "estimated", "scenario" => s.name, "scenario_sha256" => _sha256(scenario_json(s)),
+        "results_sha256" => results_sha256(s),
         "peak_rss_bytes" => e.peak_rss_bytes, "peak_rss_bound_bytes" => e.peak_rss_bound_bytes,
         "memory_terms" => O(string(k) => v for (k, v) in pairs(e.memory_terms)),
         "disk_bytes" => e.disk_bytes, "seconds" => e.seconds,
@@ -499,8 +512,21 @@ function _cli_merge(args, stdout, stderr)
             push!(get!(rows, r, String[]), l)
         end
     end
+    # runs agree on the results-relevant content of their scenarios, read
+    # with this version (so runs whose canonical forms differ only by keys
+    # added since, at their defaults, merge)
+    res = String[]
+    for x in provs
+        sx = try
+            read_scenario(joinpath(x.dir, "scenario.json"))
+        catch e
+            e isa ScenarioError || rethrow()
+            return _reject(stdout, stderr, "$(x.dir)/scenario.json does not read: $(join(e.errors, "; "))")
+        end
+        push!(res, results_sha256(sx))
+    end
+    length(unique(res)) == 1 || return _reject(stdout, stderr, "the runs are of different scenarios (results_sha256 differ)")
     shas = unique(String(x.prov["scenario_sha256"]) for x in provs)
-    length(shas) == 1 || return _reject(stdout, stderr, "the runs are of different scenarios (scenario_sha256 differ)")
     reps = [Int.(x.prov["replicates"]) for x in provs]
     all_reps = reduce(vcat, reps)
     allunique(all_reps) || return _reject(stdout, stderr, "the runs share replicates; merge needs disjoint ones")
@@ -517,12 +543,14 @@ function _cli_merge(args, stdout, stderr)
     files = ["scenario.json", "summary.csv", "aggregate.csv"]
     hashes = O(f => _sha256_file(joinpath(out, f)) for f in files)
     prov = O("bngsim" => string(pkgversion(BnGsim)), "cli_interface" => CLI_INTERFACE_VERSION,
-        "scenario_sha256" => shas[1], "replicates" => sort(all_reps), "merged" => string(now(UTC), "Z"),
+        "outputs_version" => OUTPUTS_VERSION, "results_sha256" => res[1],
+        "scenario_sha256" => length(shas) == 1 ? shas[1] : shas, "replicates" => sort(all_reps),
+        "merged" => string(now(UTC), "Z"),
         "host" => gethostname(), "julia" => string(VERSION),
         "sources" => [O("directory" => abspath(x.dir), "provenance_sha256" => x.sha, "replicates" => r,
             "bngsim" => x.prov["bngsim"]) for (x, r) in zip(provs, reps)], "outputs" => hashes)
     open(io -> _emit(io, prov), joinpath(out, "provenance.json"), "w")
-    _emit(stdout, O("status" => "merged", "scenario_sha256" => shas[1], "replicates" => sort(all_reps),
+    _emit(stdout, O("status" => "merged", "results_sha256" => res[1], "replicates" => sort(all_reps),
         "outputs" => [joinpath(out, f) for f in [files; "provenance.json"]]))
     return ExitCode.OK
 end
