@@ -1,5 +1,44 @@
 # BnGsim.jl release notes
 
+## v0.35.0 (2026-11-23)
+
+The contract of the results toward 1.0 (package roadmap §11, decisions b
+and d).
+
+### New
+
+- `results_sha256(s)` and `results_dict(s)`: the hash of the content of a
+  scenario that determines its results, the canonical object without
+  `name`, `replicates`, the schema keys and `founders.history_dir`, and
+  without every key at its default (a key is left out when the scenario
+  read without it is the same). Adding a key in a later release, with a
+  default that keeps earlier results, changes the canonical text and
+  `scenario_sha256` of every scenario but not its `results_sha256`.
+  `validate`, `run`, `estimate` and `merge` report it; `provenance.json`
+  records it.
+- `outputs_version` (1) in `provenance.json` and `bngsim version --json`,
+  and a documentation page "Output files" with the columns of
+  `summary.csv`, `aggregate.csv`, the archives and the history directory.
+  Within a version columns are only appended; the test suite pins the
+  columns of `summary.csv` for one trait, repeated records and two
+  traits with OCS.
+- Schema policy documented (page "Scenarios"): version 1 grows by keys
+  with result-preserving defaults only.
+
+### Changed
+
+- `bngsim merge` accepts runs whose scenarios agree on `results_sha256`
+  (each run's `scenario.json` read with this version) instead of on
+  `scenario_sha256`: runs may differ in name and number of replicates,
+  and runs made before and after a key was added merge. The merged
+  `provenance.json` gives `scenario_sha256` as a list when the sources
+  differ; `OUT/scenario.json` is that of the first run.
+- A bottleneck without `recovery` is stored with `recovery = ne`, its
+  meaning, so that the scenario with and without `"recovery": ne` is the
+  same (the canonical JSON and all results are unchanged).
+
+No breaking changes to the Julia API. Results are unchanged.
+
 ## v0.34.0 (2026-11-23)
 
 The Julia API toward 1.0 (package roadmap §11, decisions a and c).

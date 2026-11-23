@@ -29,6 +29,21 @@ with ASCII names for the Unicode ones (`lambda`, `kappa`, `delta_F`), and a
 trait takes those of `BnGStructs.Trait` (`h2`, `sigma_a`, `mu`, `sex`,
 `age`, and `da` for the distribution of the QTL effects).
 
+### Versions and hashes
+
+Schema version 1 grows by keys only: a release may add a key, always
+with a default that keeps the results of every earlier scenario, and
+never removes or redefines one (that would be version 2). The canonical
+form ([`scenario_json`](@ref)) writes every key with its value, so each
+added key changes the canonical text of every scenario and its SHA-256
+(`scenario_sha256` in the provenance), although no result changes.
+[`results_sha256`](@ref) hashes only what determines the results: the
+canonical object without `name`, `replicates`, the schema keys and
+`founders.history_dir`, and without every key at its default. It is the
+same for a scenario written with or without a key at its default, and in
+a release before or after that key was added; `bngsim merge` compares
+it.
+
 ## Validation
 
 [`read_scenario`](@ref) and [`parse_scenario`](@ref) check the whole
@@ -79,8 +94,8 @@ with others, and on any number of threads.
 
 ## Limits of version 1
 
-- Founders come from a FisherWright historical population; a scenario
-  takes no file paths (the service accepts no user paths, roadmap I9).
+- Founders come from a FisherWright historical population, simulated or
+  stored (`founders.history_dir`, the only file path a scenario takes).
 - Traits are additive (as the breeding loop).
 - One scheme for the whole run.
 - Provenance is written by the [command line](cli.md) with the outputs

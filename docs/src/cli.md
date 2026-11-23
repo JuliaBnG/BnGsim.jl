@@ -26,7 +26,8 @@ Every command writes one JSON object to stdout and diagnostics to
 stderr, so a caller reads the result from stdout and the reason for a
 failure from both.
 
-- `validate` prints `{"status": "valid", "scenario_sha256", ...}`, or
+- `validate` prints `{"status": "valid", "scenario_sha256",
+  "results_sha256", ...}`, or
   `{"status": "invalid", "errors": [...]}` with every problem of the
   scenario and its path.
 - `estimate` prints the expected peak memory, a conservative bound, the
@@ -47,8 +48,10 @@ failure from both.
     inbreeding `dF` (pedigree) and `dFhet` (loss of heterozygosity), and
     the variance and genic variance relative to the first step,
     `var_ratio` and `genic_ratio` ([`aggregate`](@ref));
-  - `provenance.json`: the canonical scenario and its SHA-256, the seed and
-    replicates, the BnGsim, CLI and schema versions, the Julia and package
+  - `provenance.json`: the canonical scenario, its SHA-256
+    (`scenario_sha256`) and that of its results-relevant content
+    (`results_sha256`, [`results_sha256`](@ref)), the seed and
+    replicates, the BnGsim, CLI, schema and outputs versions, the Julia and package
     versions, the SHA-256 of the active manifest, the operating system,
     CPU, host and threads, the start and end times, and the SHA-256 of the
     other two files.
@@ -70,6 +73,8 @@ are byte-identical whatever the number of threads: for
 compiled code change the last bits of floating-point sums: Julia started
 with `--check-bounds=yes` (as `Pkg.test` does) gives other last digits
 than the default. Everything about the run itself is in `provenance.json`.
+The files and their columns, and the rule for changing them
+(`outputs_version`), are in [Output files](outputs.md).
 
 ## Historical populations
 
@@ -101,8 +106,11 @@ its manifest.
 
 `bngsim run ... --replicates A:B` runs part of the replicates of a
 scenario, for example on several hosts, and `bngsim merge DIR... --out OUT`
-combines completed runs of the same scenario (the SHA-256 of their
-scenarios must agree) whose replicates do not overlap. `OUT` gets the
+combines completed runs of the same scenario whose replicates do not
+overlap: their scenarios must agree on `results_sha256`, so they may
+differ in name and number of replicates, and a run made before a key was
+added (at its default) merges with one made after. `OUT/scenario.json`
+is that of the first run given. `OUT` gets the
 scenario, the summaries ordered by replicate, the aggregate and a
 provenance that lists the runs merged. Since every replicate is keyed by
 its number, the merged `summary.csv` and `aggregate.csv` are byte for

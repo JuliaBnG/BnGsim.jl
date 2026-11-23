@@ -6,14 +6,11 @@ values, the QTL with their effects, and genotypes. `bngsim run ...
 --archive PANEL` writes one per replicate to `DIR/archive/r<N>/` when the
 replicate finishes, and [`write_archive`](@ref) writes one from Julia.
 
-| File | Content |
-| :--- | :--- |
-| `pedigree.csv` | `id, sire, dam, sex, generation, exit`; `0` for an unknown parent, `sex` `M`/`F`, `exit` the time step the animal died or was culled (empty while alive) |
-| `records.csv` | `id` and one column per trait: the phenotype where it was recorded (expressed in the animal's sex, at or after the trait's age, alive then), empty otherwise |
-| `truth.csv` | `id, tbv_<trait>..., ebv_<trait>...`: the true genetic values and the last evaluation |
-| `traits.csv` | per trait: `name, h2, sigma_a, mu, sex, age, intercept` |
-| `qtl.csv` | `locus, chr, bp` (within the chromosome) and the effect of one copy of the allele coded 1 for each trait |
-| `genotypes.bed/.bim/.fam` | PLINK 1 binary genotypes of every animal whose genome is kept, at the loci of `PANEL` |
+The files and their columns are listed in [Output files](outputs.md):
+`pedigree.csv` (with the herd), `records.csv`, `truth.csv`,
+`traits.csv`, `repeated.csv` (with repeated records), `qtl.csv`, and
+PLINK 1 binary genotypes `genotypes.bed/.bim/.fam` of every animal whose
+genome is kept, at the loci of `PANEL`.
 
 `PANEL` is `chip` (the scenario's chip), `qtl`, `all` (every segregating
 locus of the founders) or `none` (no genotypes). The archives are listed

@@ -49,6 +49,7 @@ include("histories.jl")
 include("meiosis-models.jl")
 include("reproduction.jl")
 include("accessors.jl")
+include("outputs.jl")
 include("examples.jl")
 include("signals.jl")
 
