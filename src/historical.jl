@@ -140,6 +140,35 @@ function founder_haplotypes(res::FisherWrightResult, nid::Integer; rng::Abstract
 end
 
 """
+    founder_haplotypes(res::FisherWrightResult, nid, loci::TraitLoci; rng) -> (xy, lmp, rows, effects)
+
+Sample `nid` founders from `res` as the method above (same draws from
+`rng`), with the alleles of the historical trait of `loci` (FisherWright's
+`selected_haplotypes`) merged into the neutral ones: a neutral mutation
+at the coordinate of a trait locus is dropped, as the site is a trait
+locus. Also returns the rows of `lmp` that are trait loci segregating
+among the founders and the effect of their derived allele (the first
+trait of `loci`; additive, `h = 0.5`).
+"""
+function founder_haplotypes(res::FisherWrightResult, nid::Integer, loci::TraitLoci;
+    rng::AbstractRNG = Random.default_rng())
+    all(==(0.5), loci.h) || throw(ArgumentError("the breeding loop handles additive trait loci only (h = 0.5)"))
+    np = length(res.active_haplotypes) ÷ 2
+    0 < nid ≤ np || throw(ArgumentError("nid = $nid not in 1:$np"))
+    ids = nid == np ? collect(1:np) : sort(sample(rng, 1:np, nid; replace = false))
+    tp = loci.pos
+    muts = Vector{Vector{UInt32}}(undef, 2nid)
+    for (k, i) in enumerate(ids), h in (2i - 1, 2i)
+        neutral = filter(p -> !insorted(p, tp), res.active_haplotypes[h])
+        muts[2k - (h == 2i - 1)] = sort!(vcat(neutral, res.selected_haplotypes[h]))
+    end
+    xy, lmp = dense_haplotypes(muts, res.chromosome_ends; rng = copy(rng))
+    rows = findall(p -> insorted(p, tp), lmp.pos)
+    effects = [loci.a[searchsortedfirst(tp, lmp.pos[r]), 1] for r in rows]
+    return xy, lmp, rows, effects
+end
+
+"""
     founder_haplotypes(fxy::AbstractString, fmp::AbstractString, nid, cbp;
                        rng = Random.default_rng()) -> (xy::BitMatrix, lmp::DataFrame)
 
