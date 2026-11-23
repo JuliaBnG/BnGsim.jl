@@ -25,7 +25,7 @@ end
     @test basename.(files) == ["pedigree.csv", "records.csv", "truth.csv", "traits.csv", "qtl.csv",
         "genotypes.fam", "genotypes.bim", "genotypes.bed"]
     ped = readlines(joinpath(dir, "pedigree.csv"))
-    @test ped[1] == "id,sire,dam,sex,generation,exit" && length(ped) == length(pop) + 1
+    @test ped[1] == "id,sire,dam,sex,generation,exit,herd" && length(ped) == length(pop) + 1
     f = split(ped[end], ',')
     n = length(pop)
     @test parse.(Int, f[1:3]) == [n, pop.sire[n], pop.dam[n]] && f[4] == (pop.male[n] ? "M" : "F")

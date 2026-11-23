@@ -319,7 +319,10 @@ run. The garbage collector alone moves the peak of one scenario by up to
    sign, spike-and-slab *(done, 0.23.0: scenario families and the
    samplers `RandomSign`, `SpikeSlab`)*.
 4. Phenotypes: TBV plus fixed/contemporary-group effects plus correlated
-   residuals. *Done:* correlated residuals. *To do:* contemporary groups.
+   residuals. *Done:* correlated residuals; contemporary groups (0.24.0:
+   herds, offspring in the dam's herd, herd × record-step effects with
+   variance `c2` of the founders' `Vp`, fitted as fixed effects by the
+   evaluations).
 5. Threshold traits *(done)*, sex-limited traits *(done)*, age-limited and
    repeated records *(to do)*, missing-record masks.
 6. Founder histories with selection or demography, using the FisherWright

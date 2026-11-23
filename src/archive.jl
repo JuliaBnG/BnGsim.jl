@@ -15,10 +15,11 @@ _csvnum(x::Real) = isnan(x) ? "" : string(x)
 Write the population `pop` to directory `dir` (created if needed) and
 return the files written:
 
-- `pedigree.csv`: `id, sire, dam, sex, generation, exit` (`0` for an
-  unknown parent; `sex` `M` or `F`; `generation` the birth cohort; `exit`
-  the first time step at which the animal was dead or culled, empty while
-  it lives);
+- `pedigree.csv`: `id, sire, dam, sex, generation, exit, herd` (`0` for
+  an unknown parent; `sex` `M` or `F`; `generation` the birth cohort;
+  `exit` the first time step at which the animal was dead or culled,
+  empty while it lives; `herd`, so that the contemporary group of a
+  record of a trait is `herd` and `generation + age`);
 - `records.csv`: `id` and one column per trait, the phenotype where it
   was recorded by time step `t` (expressed in the animal's sex, at or
   after the trait's age, alive at that age; [`observed`](@ref)), empty
@@ -26,7 +27,8 @@ return the files written:
 - `truth.csv`: `id`, then `tbv_<trait>` (the true genetic value) and
   `ebv_<trait>` (the last evaluation, empty if none) for each trait;
 - `traits.csv`: one row per trait: `name, h2, sigma_a, mu, sex, age,
-  intercept` (the constant of its genetic value);
+  intercept, c2` (the constant of its genetic value; the variance of the
+  contemporary-group effects as a fraction of `sigma_a²/h2`);
 - `qtl.csv` (if `qtl` is given, the locus indices of the QTL in `vm`):
   `locus, chr, bp`, then the additive effect of one copy of the allele
   coded 1 for each trait;
@@ -56,11 +58,11 @@ function write_archive(dir::AbstractString, pop::Population, vm::VariantMap, sp:
     files = String[]
     out(f) = (p = joinpath(dir, f); push!(files, p); p)
     open(out("pedigree.csv"), "w") do io
-        println(io, "id,sire,dam,sex,generation,exit")
+        println(io, "id,sire,dam,sex,generation,exit,herd")
         for i = 1:n
             e = pop.exit[i] == typemax(Int32) ? "" : string(pop.exit[i])
             println(io, i, ',', pop.sire[i], ',', pop.dam[i], ',', pop.male[i] ? 'M' : 'F', ',',
-                pop.generation[i], ',', e)
+                pop.generation[i], ',', e, ',', pop.herd[i])
         end
     end
     obs = observed(pop, t)
@@ -77,9 +79,11 @@ function write_archive(dir::AbstractString, pop::Population, vm::VariantMap, sp:
         end
     end
     open(out("traits.csv"), "w") do io
-        println(io, "name,h2,sigma_a,mu,sex,age,intercept")
-        for (tr, q) in zip(pop.traits, pop.qtl)
-            println(io, tr.name, ',', tr.h², ',', tr.σₐ, ',', tr.μ, ',', tr.sex, ',', tr.age, ',', q.intercept)
+        println(io, "name,h2,sigma_a,mu,sex,age,intercept,c2")
+        for (j, (tr, q)) in enumerate(zip(pop.traits, pop.qtl))
+            c2 = pop.σcg[j]^2 * tr.h² / tr.σₐ^2
+            println(io, tr.name, ',', tr.h², ',', tr.σₐ, ',', tr.μ, ',', tr.sex, ',', tr.age, ',', q.intercept, ',',
+                _csvnum(c2))
         end
     end
     bp = chrpos(vm, sp)

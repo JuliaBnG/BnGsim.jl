@@ -1,5 +1,38 @@
 # BnGsim.jl release notes
 
+## v0.24.0 (2026-11-23)
+
+### New
+
+- Contemporary groups (Phase 2). `founder_population(...; herds, c2)` and
+  the scenario keys `founders.herds` (`1`) and `traits[].c2` (`0.0`):
+  founders are placed in `herds` herds at random (keyed), offspring are
+  born in their dam's herd, and each record of trait `j` gets the effect
+  of its group, herd × time step of the record (birth plus the trait's
+  `age`), drawn keyed per group from ``N(0, c_j^2 V_{p,j})`` with
+  ``V_p = σ²_a + σ²_e`` of the founders; `h2` stays the heritability
+  within groups. Effects of different traits are independent. When some
+  `c2 > 0`, PBLUP, GBLUP and ssGBLUP fit the groups as fixed effects (a
+  sparse incidence matrix) in place of the overall mean; `:phenotype`
+  selection ranks on phenotypes that include the group effects.
+- Checks: adding a constant to every record of one group leaves the EBVs
+  unchanged (one and two traits), and changes them without groups;
+  REML with groups fitted (c2 = 0.2, 20 herds, random selection, 80
+  replicates) gives σ²e = 2.338 ± 0.017 (true 2.333; 3.000 if the group
+  variance were absorbed) and σ²a = 0.965 ± 0.023, against 0.982 ± 0.024
+  for the same design without groups (true 1).
+- `pedigree` and the archive's `pedigree.csv` have a column `herd`;
+  `traits.csv` a column `c2`.
+
+### Changed
+
+- The canonical JSON of every scenario now lists `founders.herds` and
+  each trait's `c2`, so its SHA-256 in the provenance changes; with the
+  defaults the simulation does not (the golden loop checksum is
+  unchanged).
+- Columns added to `pedigree` (a DataFrame) and to the archive files:
+  readers by position must be updated.
+
 ## v0.23.0 (2026-11-23)
 
 ### New

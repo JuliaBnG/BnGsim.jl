@@ -130,7 +130,7 @@ end
         survival = [0.9], window = 2), MeiosisMap(sp, vm), 3)
     n = length(pop)
     df = pedigree(pop)
-    @test names(df) == ["id", "sire", "dam", "male", "generation", "exit",
+    @test names(df) == ["id", "sire", "dam", "male", "generation", "exit", "herd",
         "tbv_milk", "phenotype_milk", "ebv_milk", "tbv_growth", "phenotype_growth", "ebv_growth"]
     @test df.id == 1:n && df.sire == pop.sire && df.dam == pop.dam && df.male == pop.male
     @test df.tbv_growth == pop.tbv[:, 2]

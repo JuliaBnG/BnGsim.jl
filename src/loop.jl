@@ -26,6 +26,8 @@
 const _STAGE_SEX = 0x0001
 const _STAGE_PAIRING = 0x0002
 const _STAGE_RANDOM_SELECTION = 0x0003
+const _STAGE_HERD = 0x0004              # Domain.MATING: a founder's herd
+const _STAGE_CG = 0x0005                # Domain.PHENOTYPE: herd × step effects
 
 """
     Population
@@ -81,6 +83,8 @@ mutable struct Population
     G0::Matrix{Float64}
     R0::Matrix{Float64}
     meioses::Vector{Union{Nothing,MeiosisRecord}}
+    herd::Vector{Int32}
+    σcg::Vector{Float64}
 end
 
 Base.length(pop::Population) = length(pop.sire)
@@ -111,6 +115,19 @@ The covariance components of the evaluations are those of the founders:
 correlation matrix of the founders' genetic values (exactly the `R` of a
 multi-trait [`eqtl`](@ref)), and ``R_0 = D_e R_e D_e``.
 
+Contemporary groups: with `herds = H`, each founder is placed in one of
+`H` herds at random (a keyed draw, `Domain.MATING`), and every offspring
+is born in its dam's herd. A record of trait `j` belongs to the group of
+the animal's herd and the time step of the record (birth plus the trait's
+`age`); each group and trait has an effect ``N(0, \\sigma^2_{cg,j})``, a
+keyed draw per herd and step (`Domain.PHENOTYPE`), added to the
+phenotype, with ``\\sigma^2_{cg,j} = c^2_j(\\sigma^2_{a,j} + \\sigma^2_{e,j})``
+from `c2` (a number for all traits, or one per trait; default `0`, no
+effect). `h^2` stays the heritability within groups,
+``\\sigma^2_a/(\\sigma^2_a + \\sigma^2_e)``. Effects of different traits are
+independent. When some `c2 > 0`, evaluations fit the groups as fixed
+effects in place of the overall mean (see [`evaluate!`](@ref)).
+
 A trait's `sex` (`0` females, `1` males, `2` both) limits its records to
 one sex; its `age`, a whole number of time steps, is the age at which a
 record becomes available to evaluations (`0`: at birth). Phenotypes are
@@ -118,12 +135,13 @@ drawn for every animal and trait either way, from the animal's own keyed
 stream, so these settings change which records are seen, not the values
 drawn.
 """
-function founder_population(hap::Haplotype, qtl::TraitQTL, trait::Trait, key::SimKey)
-    _founders(hap, [qtl], Trait[trait], key, ones(1, 1))
+function founder_population(hap::Haplotype, qtl::TraitQTL, trait::Trait, key::SimKey; herds::Integer = 1,
+    c2 = 0.0)
+    _founders(hap, [qtl], Trait[trait], key, ones(1, 1), herds, c2)
 end
 
 function founder_population(hap::Haplotype, qtl::MultiTraitQTL, traits::AbstractVector{<:Trait}, key::SimKey;
-    Re = I)
+    Re = I, herds::Integer = 1, c2 = 0.0)
     k = length(traits)
     qtl.trait_names == [t.name for t in traits] ||
         throw(ArgumentError("the traits must be those of the QTL, in order: $(qtl.trait_names)"))
@@ -133,10 +151,15 @@ function founder_population(hap::Haplotype, qtl::MultiTraitQTL, traits::Abstract
     size(Rm) == (k, k) && issymmetric(Rm) && all(Rm[j, j] == 1 for j = 1:k) && isposdef(Rm) ||
         throw(ArgumentError("Re must be a $k × $k positive definite correlation matrix"))
     qs = [TraitQTL(qtl.trait_names[j], qtl.loci, qtl.additive[:, j]; intercept = qtl.intercept[j]) for j = 1:k]
-    _founders(hap, qs, Vector{Trait}(traits), key, Rm)
+    _founders(hap, qs, Vector{Trait}(traits), key, Rm, herds, c2)
 end
 
-function _founders(hap, qs, traits, key, Re)
+function _founders(hap, qs, traits, key, Re, herds, c2)
+    k = length(traits)
+    herds >= 1 || throw(ArgumentError("herds must be at least 1"))
+    c2v = c2 isa Real ? fill(Float64(c2), k) : Float64.(collect(c2))
+    length(c2v) == k && all(x -> 0 <= x < 1, c2v) ||
+        throw(ArgumentError("c2 must be a number in [0, 1) or one per trait"))
     any(_has_dominance, qs) && throw(ArgumentError("the breeding loop handles additive traits only"))
     all(t -> isinteger(t.age), traits) ||
         throw(ArgumentError("a trait's age must be a whole number of time steps"))
@@ -152,7 +175,13 @@ function _founders(hap, qs, traits, key, Re)
     R0 = σe .* Re .* σe'
     pop = Population(zeros(Int32, n), zeros(Int32, n), falses(n), zeros(Int32, n), fill(typemax(Int32), n), G,
         fill(NaN, size(G)), fill(NaN, size(G)), Union{Nothing,Haplotype}[hap], [1], Int32.(1:n), qs, traits, Lr, key, G0, R0,
-        Union{Nothing,MeiosisRecord}[])
+        Union{Nothing,MeiosisRecord}[], ones(Int32, n), sqrt.(c2v .* (σa .^ 2 .+ σe .^ 2)))
+    if herds > 1
+        for i = 1:n
+            pop.herd[i] = keyed_int(keyed_rng(SimKey(key; generation = 0, domain = Domain.MATING,
+                stage = _STAGE_HERD, entity = i)), Int32(1), Int32(herds))
+        end
+    end
     _sexes!(pop, 1:n, 0)
     _phenotypes!(pop, 1:n, 0)
     return pop
@@ -173,7 +202,7 @@ keeps the identity of every animal:
 - `id`, `sire`, `dam` (`0` = unknown; parents are ids, and may be absent
   from a subset), `male`, `generation` (the birth cohort), `exit` (the
   first time step at which the animal is dead or culled; `missing` while
-  it lives);
+  it lives), `herd`;
 - per trait `<name>`: `tbv_<name>`, the true genetic value;
   `phenotype_<name>`, the phenotype (`missing` in the sex that does not
   express the trait; it is drawn at birth, and is available to an
@@ -196,6 +225,7 @@ function pedigree(pop::Population, ids = 1:length(pop))
         male = pop.male[ids],
         generation = Int.(pop.generation[ids]),
         exit = [x == typemax(Int32) ? missing : Int(x) for x in pop.exit[ids]],
+        herd = Int.(pop.herd[ids]),
     )
     for (j, t) in enumerate(pop.traits)
         df[!, "tbv_" * t.name] = pop.tbv[ids, j]
@@ -270,9 +300,46 @@ function _phenotypes!(pop::Population, ids, g)
                 e += pop.Lr[j, l] * z[l]
             end
             t = pop.traits[j]
-            pop.phenotype[i, j] = _expresses(t, pop.male[i]) ? t.μ + pop.tbv[i, j] + e : NaN
+            pop.phenotype[i, j] = _expresses(t, pop.male[i]) ? t.μ + pop.tbv[i, j] + e + _cg(pop, i, j) : NaN
         end
     end
+end
+
+# The effect of the contemporary group of animal i's record of trait j:
+# its herd and the step of the record. All traits' effects of a group come
+# from one keyed stream, trait 1 first.
+function _cg(pop::Population, i, j)
+    pop.σcg[j] > 0 || return 0.0
+    t = pop.generation[i] + Int(pop.traits[j].age)
+    rng = keyed_rng(SimKey(pop.key; generation = t, domain = Domain.PHENOTYPE, stage = _STAGE_CG,
+        entity = pop.herd[i]))
+    z = 0.0
+    for _ = 1:j
+        z = randn(rng)
+    end
+    return pop.σcg[j] * z
+end
+
+# The contemporary group of each record of trait j among `ids`: herd and
+# step of the record, numbered 1, 2, … in order of first appearance.
+function _groups(pop::Population, ids, j)
+    a = Int(pop.traits[j].age)
+    keys = [(pop.herd[i], pop.generation[i] + a) for i in ids]
+    lv = Dict{eltype(keys),Int}()
+    return [get!(lv, x, length(lv) + 1) for x in keys]
+end
+
+_fits_groups(pop::Population) = any(>(0), pop.σcg)
+
+# Fixed effects of trait j's records `rec` (rows of the view `v`): the
+# contemporary groups when they are fitted (a sparse incidence matrix),
+# else the overall mean.
+function _fixed(pop::Population, v, rec, j; nrow = length(rec), rows = 1:length(rec))
+    _fits_groups(pop) || (X = zeros(nrow, 1); X[rows, 1] .= 1; return X)
+    g = _groups(pop, v.ids[rec], j)
+    lv = zeros(Int, nrow)
+    lv[rows] = g
+    return incidence(lv, maximum(g; init = 0))
 end
 
 """
@@ -594,7 +661,7 @@ function evaluate!(pop::Population, sc::Scheme)
     if k == 1
         rec = findall(view(obs, :, 1))
         y = P[rec, 1]
-        X = ones(length(rec), 1)
+        X = _fixed(pop, v, rec, 1)
         effects = [RandomEffect(incidence(rec, n), Kinv, pop.G0[1, 1])]
         if do_reml
             r = reml(y, X, effects; σ²e = pop.R0[1, 1], tol = 1e-6, maxiter = 100)
@@ -605,7 +672,8 @@ function evaluate!(pop::Population, sc::Scheme)
         end
         m = mme(y, X, effects; σ²e = pop.R0[1, 1])
     else
-        y, X, Zs = _mt_design(P, obs)
+        y, X, Zs = _mt_design(P, obs, j -> (rec = findall(view(obs, :, j));
+            _fixed(pop, v, rec, j; nrow = size(obs, 1), rows = rec)))
         if do_reml
             for j = 1:k, l = 1:j-1
                 any(view(obs, :, j) .& view(obs, :, l)) || throw(ArgumentError(
@@ -639,11 +707,13 @@ end
 # Every trait keeps its genetic component, so a trait without records yet
 # (e.g. recorded late in life) is predicted through G0; only the
 # intercepts of traits with records enter X.
-function _mt_design(P, obs)
+# `fixed(j)` is trait j's fixed-effect design over all n rows (only the
+# rows with records are used); the default is the overall mean.
+function _mt_design(P, obs, fixed = j -> ones(size(obs, 1), 1))
     n, k = size(obs)
     ot = findall(j -> any(view(obs, :, j)), 1:k)
     y, _ = mt_stack(ifelse.(obs, P, NaN))
-    X = reduce(hcat, mt_blocks(obs, [ones(n, 1) for _ = 1:k])[ot])
+    X = reduce(hcat, mt_blocks(obs, [fixed(j) for j = 1:k])[ot])
     Zs = mt_blocks(obs, [incidence(1:n, n) for _ = 1:k])
     return y, X, Zs
 end
@@ -844,6 +914,7 @@ function step!(pop::Population, sc::Scheme, mm::MeiosisMap)
     append!(pop.dam, Int32.(plan[:, 2]))
     append!(pop.male, falses(sc.noff))
     append!(pop.generation, fill(Int32(g + 1), sc.noff))
+    append!(pop.herd, pop.herd[plan[:, 2]])
     pop.tbv = vcat(pop.tbv, reduce(hcat, [tbv(off, q) for q in pop.qtl]))
     pop.phenotype = vcat(pop.phenotype, fill(NaN, sc.noff, k))
     pop.ebv = vcat(pop.ebv, fill(NaN, sc.noff, k))
