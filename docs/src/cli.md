@@ -56,9 +56,12 @@ failure from both.
 - `version --json` prints the versions and the manifest hash.
 
 `scenario.json` and `summary.csv` depend only on the scenario, the
-replicates and the package versions. They are byte-identical whatever
-the number of threads: for `examples/minimal.json`, checked at 1 and 8
-threads. Everything about the run itself is in `provenance.json`.
+replicates, the Julia and package versions, and the compiler flags. They
+are byte-identical whatever the number of threads: for
+`examples/minimal.json`, checked at 1 and 8 threads. Flags that change the
+compiled code change the last bits of floating-point sums: Julia started
+with `--check-bounds=yes` (as `Pkg.test` does) gives other last digits
+than the default. Everything about the run itself is in `provenance.json`.
 
 ## Replicates on several hosts
 
@@ -79,6 +82,15 @@ scenario, the shared historical population, the summaries of the
 replicates done, and a checkpoint of the one in progress. A file
 `DIR/CANCEL` (created by a user or the service) stops the run after the
 current time step: the state is saved and `bngsim` exits with code 7.
+SIGINT (Ctrl-C) and SIGTERM (as a job scheduler or `kill` sends it) to
+`bin/bngsim` do the same: the launcher creates `DIR/CANCEL`, so the run
+stops at the next step boundary, never inside a step. Before the run has
+saved any state (while Julia loads, or the scenario is checked) there is
+nothing to keep, and the launcher stops Julia at once; a second signal
+also stops it at once, with the last saved state kept (state files are
+written atomically, never half-written). The signals are handled by the
+launcher, not by Julia, so that they behave the same on every Julia
+version and number of threads.
 `bngsim resume DIR` removes `DIR/CANCEL` and continues. With
 `--checkpoint-every K` the state is also saved every `K` steps, so that a
 process that is killed, or a host that goes down, loses at most `K` steps.
@@ -102,7 +114,7 @@ versions; it is for continuing a run, not for archiving.
 | 4 | refused: the output directory is not empty or holds an unfinished run, the replicates are outside the scenario's, or there is nothing to resume (or its state is from another version) |
 | 5 | refused before running: the memory bound exceeds `--memory-limit` |
 | 6 | the simulation stopped with an explicit error, e.g. fewer segregating loci than the panels ask for |
-| 7 | stopped at a step boundary by `DIR/CANCEL`; `bngsim resume DIR` continues |
+| 7 | stopped at a step boundary by `DIR/CANCEL` (also created by `bin/bngsim` on SIGINT or SIGTERM); `bngsim resume DIR` continues |
 | 70 | internal error (a bug) |
 
 A run that fails before it saved any state, or is refused, writes no

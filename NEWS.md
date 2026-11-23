@@ -1,5 +1,18 @@
 # BnGsim.jl release notes
 
+## v0.20.0 (2026-11-22)
+
+### New
+
+- SIGINT (Ctrl-C) and SIGTERM to `bin/bngsim run` or `resume` stop the
+  run at the next time step with the state saved, exit code 7: the
+  launcher, which now runs Julia as a child process, creates
+  `DIR/CANCEL`. Before the run has saved any state, or on a second
+  signal, it stops Julia at once. The launcher handles the signals rather
+  than Julia, whose delivery of interrupts to threaded tasks differs
+  between versions. A resumed run is byte-identical to an uninterrupted
+  one (checked after each signal).
+
 ## v0.19.0 (2026-11-20)
 
 ### New
