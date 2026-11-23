@@ -1,39 +1,38 @@
 # BnGsim.jl
 
-BnGsim.jl simulates breeding programs in the JuliaBnG ecosystem. Version
-0.4 runs discrete-generation breeding programs and provides the building
-blocks:
+BnGsim.jl simulates breeding programs in the JuliaBnG ecosystem, from a
+scenario file or from Julia:
 
-- **Founders:** Wright–Fisher burn-in through FisherWright.jl
-  (`historical_population`, `continue_population`), founder sampling
-  (`founder_haplotypes`, `sample_founder_population`), and readers and
-  writers for packed haplotype files.
+- **Scenarios and the command line:** a versioned JSON scenario
+  ([Scenarios](@ref)) run by `bngsim run` or `run_scenario`, with
+  provenance, a resource estimate, stop and resume, replicate
+  aggregation and archives for other software ([Command line](@ref)).
+- **Founders:** Wright–Fisher histories through FisherWright.jl, with
+  demography and selection, shared and stored histories
+  (`write_histories`), and founder sampling (`founder_haplotypes`).
 - **Keyed streams:** `SimKey` addresses every random stream by its
-  coordinate in the simulation, so results do not depend on thread count
-  or call order (`keyed_rng`).
-- **Meiosis:** `MeiosisMap` and `make_progeny!` (keyed, word-wise, with
-  per-chromosome genetic lengths and optional crossover records); the
-  older `gamete!`/`gene_drop!` with an explicit `rng`; `random_mate`,
-  `rnd_ped`.
+  coordinate in the simulation, so results do not depend on thread count,
+  call order or resume history (`keyed_rng`).
+- **Meiosis:** `MeiosisMap` and `make_progeny!` (keyed, word-wise,
+  sex-specific maps, crossover interference, optional crossover records).
+- **Traits:** QTL sampling (`sample_loci`, `eqtl`, `scale_qtl`) with
+  normal, Gamma, Laplace and spike-and-slab effects, several correlated
+  traits, sex- and age-limited, repeated and missing records,
+  contemporary groups.
 - **Breeding loop:** `founder_population`, `Scheme` and `simulate!`:
-  phenotypes, evaluation through Breeding.jl (true values, phenotype,
-  PBLUP, GBLUP), selection by truncation, optimum contributions
-  (`TM1997`, `rocs`) or at random, keyed mating and meiosis, with
-  per-generation summaries; discrete or overlapping generations,
-  several traits with selection on an index of multi-trait EBVs,
-  sex- and age-limited records, survival and culling, single-step
-  GBLUP, optional REML re-estimation of the
-  variance components, and checkpoints.
-- **Traits:** QTL sampling (`sample_loci`, `eqtl`, which keeps the shape of
-  the effect distribution and sets the mean through the intercept),
-  `trait_summary`, true breeding values
-  (`tbv!`), and phenotypes with correlated residuals, sex-limited expression
-  and threshold traits (`phenotype!`).
-- **Diagnostics and provenance:** `founder_summary`, `ld_decay`,
-  `vanraden_g`, `provenance`.
+  evaluation through Breeding.jl (true values, phenotype, PBLUP, GBLUP,
+  single-step GBLUP, optional REML), selection by truncation, optimum
+  contributions or at random, mating policies, reproductive limits,
+  overlapping generations, survival and culling, per-step summaries, and
+  accessors for the population (`pedigree`, `tbv`, `ebv`, `phenotypes`,
+  `records`, `genomes`).
+- **Diagnostics:** `generation_summary`, `founder_summary`, `ld_decay`,
+  `founder_segments`, `irm`, `pedigree_view`.
 
-Every stochastic function takes an explicit `rng`. See the [Roadmap](@ref)
-for the planned scenario, evaluation and selection layers.
+The building blocks of 0.1–0.3 (gene drop with an explicit `rng`,
+`historical_population`, `sample_founder_population`, `vanraden_g`, the
+text `provenance` header, …) are in `BnGsim.Legacy`, outside the keyed
+streams and the 1.0 promise (see the [API Reference](@ref)).
 
 ## A breeding program
 
@@ -63,11 +62,10 @@ Pkg.add("BnGsim")
 ## Quick start
 
 ```julia
-using BnGStructs, BnGsim, Random
+using BnGsim
 
-rng = Xoshiro(2026)
-fp  = sample_founder_population(Cattle(); ne = 100, n_id = 20, n_marker = 500, n_qtl = 50,
-                                h2 = 0.3, burnin_generations = 200, rng = rng)
-fp.tbv           # true breeding values of the founders
-fp.markers.loci  # marker chip loci in fp.map
+s  = read_scenario(joinpath(pkgdir(BnGsim), "examples", "minimal.json"))
+df = run_scenario(s)            # one row per replicate and time step
 ```
+
+or, from a shell, `bngsim run minimal.json --out out` (see [Command line](@ref)).

@@ -2,9 +2,11 @@
 
 Forward simulation of breeding programs in the
 [JuliaBnG](https://juliabng.github.io/) ecosystem: Wright–Fisher founder
-populations (FisherWright.jl), meiosis and gene dropping on packed phased
-haplotypes, QTL and phenotype simulation, and founder diagnostics, all
-built on the BnGStructs.jl data types.
+histories (FisherWright.jl), keyed meiosis on packed phased haplotypes,
+several traits with repeated records and contemporary groups, genetic
+evaluation (Breeding.jl), selection and mating, run from a versioned
+JSON scenario or from Julia, with results independent of thread count and
+resume history. Built on the BnGStructs.jl data types.
 
 [![CI](https://github.com/JuliaBnG/BnGsim.jl/actions/workflows/CI.yml/badge.svg)](https://github.com/JuliaBnG/BnGsim.jl/actions)
 [![Documentation](https://img.shields.io/badge/docs-juliabng.github.io-blue.svg)](https://juliabng.github.io/BnGsim/)
@@ -17,12 +19,14 @@ Pkg.add("BnGsim")
 ```
 
 ```julia
-using BnGStructs, BnGsim, Random
+using BnGsim
 
-rng = Xoshiro(2026)
-fp  = sample_founder_population(Cattle(); ne = 100, n_id = 20, n_marker = 500, n_qtl = 50,
-                                h2 = 0.3, burnin_generations = 200, rng = rng)
+s  = read_scenario(joinpath(pkgdir(BnGsim), "examples", "minimal.json"))
+df = run_scenario(s)            # one row per replicate and time step
 ```
+
+or `bngsim run minimal.json --out out` from a shell; scenarios are described in
+the [documentation](https://juliabng.github.io/BnGsim/dev/scenarios/).
 
 The development plan is in the [roadmap](https://juliabng.github.io/BnGsim/dev/roadmap/).
 Release notes are in [`NEWS.md`](NEWS.md).

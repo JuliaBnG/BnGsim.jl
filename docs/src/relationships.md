@@ -54,7 +54,8 @@ heterozygosity at the loci (see [`generation_summary`](@ref)).
 
 ```@example rel
 n    = length(pop)
-A    = RelationshipMatrices.nrm(pop.sire, pop.dam)
+ped  = pedigree(pop)
+A    = RelationshipMatrices.nrm(ped.sire, ped.dam)
 segs = founder_segments(pop, mm)
 Iseg = irm(segs)
 
@@ -79,8 +80,8 @@ The pairs of the last generation, by pedigree class:
 
 ```@example rel
 last = collect(generation_ids(pop, 6))
-cls(i, j) = pop.sire[i] == pop.sire[j] && pop.dam[i] == pop.dam[j] ? "full sibs" :
-            pop.sire[i] == pop.sire[j] || pop.dam[i] == pop.dam[j] ? "half sibs" : "other"
+s, d = ped.sire, ped.dam
+cls(i, j) = s[i] == s[j] && d[i] == d[j] ? "full sibs" : s[i] == s[j] || d[i] == d[j] ? "half sibs" : "other"
 pairs = [(i, j) for (a, i) in enumerate(last) for j in last[a+1:end]]
 df = DataFrame(class = [cls(i, j) for (i, j) in pairs],
     A = [A[i, j] for (i, j) in pairs], Iseg = [Iseg[i, j] for (i, j) in pairs],

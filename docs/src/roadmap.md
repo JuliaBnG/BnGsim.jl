@@ -60,17 +60,17 @@ a dependency, and BnGsim does not aim for API compatibility with them.
 Sequence-level forward simulation belongs in FisherWright (or SLiM), not
 here.
 
-## 2. Current status (v0.33.0)
+## 2. Current status (v0.34.0)
 
 | Area | State |
 | :--- | :--- |
-| Founders | `historical_population`/`HistoricalSpec` wrap `fisher_wright`. `continue_population` extends a run. `founder_haplotypes` samples founders from a `FisherWrightResult`, a packed BNGH1 file, or xyBnG `BitMatrix` output. `sample_founder_population` returns a `FounderPopulation` built on `VariantMap` and `LocusSet`. |
-| Founder diagnostics | `founder_summary` (SFS, LD decay, chip/QTL MAF, VanRaden `G` statistics, implied `Mₑ`), `ld_decay`, `vanraden_g`. |
+| Founders | Wright–Fisher histories through FisherWright (demography, selection, shared and stored histories, `write_histories`); `founder_haplotypes` samples founders from a `FisherWrightResult`, a packed BNGH1 file, or xyBnG `BitMatrix` output. The 0.2 wrappers `historical_population`/`HistoricalSpec`, `continue_population`, `read_packed_haplotypes`, `write_xy` and `sample_founder_population`/`FounderPopulation` are in `BnGsim.Legacy` (0.34.0). |
+| Founder diagnostics | `founder_summary` (SFS, LD decay, chip/QTL MAF, VanRaden `G` statistics, implied `Mₑ`), `ld_decay`; `vanraden_g` in `BnGsim.Legacy`. |
 | Keyed streams | `SimKey`, `keyed_rng` (Philox4x64-10 → Xoshiro), golden test (§4.2). |
-| Meiosis | `MeiosisMap`, `make_progeny!` (keyed, word-wise, per-chromosome genetic lengths, `MeiosisRecord`); tested against exact theory. The older `crossovers`, `gamete!`, `gene_drop!` with an explicit `rng`. `random_mate`, `rnd_ped`, `expand`. |
-| Sampling | `sample_id`, `sample_loci` (MAF-filtered chip and QTL `LocusSet`s). |
-| Traits | `eqtl` (effects scaled only, mean in the intercept, each trait's `da` honoured, realised covariance exact in the base population), `trait_summary`, `tbv!`, `phenotype!` (correlated residuals, sex-limited expression, threshold traits from a liability scale), `dummy_traits`. |
-| Provenance | `provenance` (Breeding is listed when loaded) writes a text header with the date, host, CPU, threads, seed and package versions/commits. This partly covers I2: there is no JSON manifest yet. |
+| Meiosis | `MeiosisMap`, `make_progeny!` (keyed, word-wise, per-chromosome and sex-specific genetic lengths, crossover interference, `MeiosisRecord`); tested against exact theory. The older `crossovers(sp, vm)`, `gamete!`, `gene_drop!` with an explicit `rng`, `random_mate`, `rnd_ped`, `expand` are in `BnGsim.Legacy`. |
+| Sampling | `sample_loci` (MAF-filtered chip and QTL `LocusSet`s); `sample_id` in `BnGsim.Legacy`. |
+| Traits | `eqtl` (effects scaled only, mean in the intercept, each trait's `da` honoured, realised covariance exact in the base population), `scale_qtl`, `trait_summary`. The 0.1 helpers `tbv!`, `phenotype!`, `norm_mv!`, `dummy_traits` are in `BnGsim.Legacy`. |
+| Provenance | `provenance.json` of every command-line run (I2). The text header `provenance` is in `BnGsim.Legacy`. |
 | Breeding loop | `Population` (ids equal rows; nothing is removed), `Scheme`, `step!`/`simulate!`: discrete or overlapping generations (parents up to a maximum age), one or several additive traits with sex- and age-limited records, selection on an index of multi-trait EBVs, optional (multi-trait) REML re-estimation of the covariance components, survival and culling, single-step GBLUP with a genotyped window, OCS with a target ΔF per generation for overlapping generations (newborn-cohort, age-weighted per year, age-weighted per generation), crossover records kept for realized IBD from founder segments (`founder_segments`, RelationshipMatrices 0.7.1), checkpoints that resume a run identically, evaluation through Breeding.jl (`:tbv`, `:phenotype`, `:pblup`, `:gblup`, `:ssgblup`), optionally on a window of recent cohorts and their traced ancestors through a `PedigreeView` (id ↔ row, topological, `0` for parents outside), selection by truncation, `TM1997`, `rocs` or at random, `(criterion, id)` ranking, keyed pairing and meiosis, per-generation summaries. |
 | Scenarios | A versioned JSON scenario (`Scenario`, schema `"bngsim-scenario"` version 1, 0.13.0): species, historical population and founders, QTL and chip panels, traits, scheme, steps, seed, replicates. Reading and validation that report every problem with its path (unknown, repeated and mistyped keys, ranges, combinations), a canonical form that survives a JSON round trip, and `run_scenario`/`run_replicate`, keyed so that a replicate does not depend on the others or on threads. |
 | Command line | `bin/bngsim validate | run | version` (0.14.0, CLI interface 1): one JSON object on stdout, diagnostics on stderr, enumerated exit codes; `run` writes the canonical scenario, `summary.csv` (byte-identical at 1 and 8 threads) and `provenance.json` (scenario and its SHA-256, versions, manifest hash, host, CPU, threads, times, output hashes; I2), and never overwrites. A precompile workload brings a cold `bngsim run examples/minimal.json` to about 3 s (Phase 0 gate: under 10 s). |
@@ -567,3 +567,11 @@ and of resume history. Three things are not yet stable:
   internal.
 - d. Output files: a version in the provenance (`outputs_version`) and a
   documented column table, columns only appended after 1.0.
+
+**Decided (2026-11-23): all four as recommended.** Done in 0.34.0: a
+(the building blocks in `BnGsim.Legacy`, the deprecated aliases and
+`gene_drop(pg, …)` removed) and c (`tbv`, `ebv`, `phenotypes`, `records`,
+`traits`, `trait_qtl`, `covariances`, `parity` beside `pedigree`,
+`genomes` and the others; the fields of `Population` internal). Next,
+0.35.0: b (a results hash beside the scenario hash) and d
+(`outputs_version` and the column table).

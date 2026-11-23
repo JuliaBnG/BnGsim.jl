@@ -57,27 +57,19 @@ equality holds (invariant I4 holds trivially). Tables that leave the
 population carry the id explicitly ([`pedigree`](@ref)), and relationship
 matrices on a subset are indexed through a [`PedigreeView`](@ref).
 
-Fields:
+Read it through these functions; its fields are internal and may change
+in any release:
 
-- `sire`, `dam` (`0` = unknown), `male`, `generation` (the birth cohort,
-  i.e. the time step of birth; founders are 0; with discrete generations
-  it is the generation number), `exit` (the first time step at which the
-  animal is dead or culled; `typemax(Int32)` while it lives);
-- `tbv`, `phenotype`, `ebv`: `n × k` matrices, one column per trait, of
-  genetic values, phenotypes (`NaN` in the sex that does not express the
-  trait) and the last evaluation;
-- `blocks`, `first`, `slot`: the haplotypes, one `Haplotype` per cohort
-  (`nothing` once no genome of the cohort is kept), with `first[t + 1]`
-  the id of the first animal of cohort `t` and `slot[i]` the position of
-  animal `i` in its cohort's block (`0` once its genome is dropped, see
-  `retain` in [`Scheme`](@ref)); read genomes with [`genomes`](@ref);
-- `qtl` (one `TraitQTL` per trait), `traits`, `Lr` (lower-triangular
-  factor of the true residual covariance matrix, ``R = L_rL_r'``), `key`;
-- `G0`, `R0`: the genetic and residual covariance matrices of the next
-  evaluation (the true ones of the founders unless re-estimated);
-- `meioses`: the crossover records of each cohort (`meioses[t]` for
-  cohort `t ≥ 1`, parents as population ids) when the scheme records
-  them, `nothing` otherwise; see [`founder_segments`](@ref).
+- [`pedigree`](@ref): ids, parents, sex, birth cohort, exit, herd, and
+  per trait the true value, phenotype and EBV, as a table;
+- [`tbv`](@ref), [`ebv`](@ref), [`phenotypes`](@ref): the same values as
+  `n × k` matrices; [`records`](@ref): every record, with its time step;
+- [`traits`](@ref), [`trait_qtl`](@ref), [`covariances`](@ref): the
+  traits, their QTL, and the covariance matrices of the next evaluation;
+- [`genomes`](@ref), [`retained`](@ref): the haplotypes kept;
+- [`alive`](@ref), [`observed`](@ref), [`recorded`](@ref),
+  [`parity`](@ref), [`meioses`](@ref), [`current_step`](@ref),
+  [`ngenerations`](@ref), [`generation_ids`](@ref), `length`.
 
 Build one with [`founder_population`](@ref), extend it with
 [`step!`](@ref), and save or restore it with [`save_checkpoint`](@ref)
@@ -118,7 +110,18 @@ end
 
 Base.length(pop::Population) = length(pop.sire)
 ntraits(pop::Population) = length(pop.traits)
+"""
+    ngenerations(pop::Population) -> Int
+
+The number of cohorts of `pop`, the founders (cohort 0) included.
+"""
 ngenerations(pop::Population) = length(pop.blocks)
+
+"""
+    generation_ids(pop::Population, g) -> UnitRange{Int}
+
+The ids of the animals of cohort `g` (born at time step `g`; founders 0).
+"""
 generation_ids(pop::Population, g::Integer) = pop.first[g+1]:(g + 2 <= length(pop.first) ? pop.first[g+2] - 1 : length(pop))
 
 function Base.show(io::IO, pop::Population)
@@ -170,17 +173,17 @@ traits with ``r > h^2``) and the temporary residuals of the records one
 animal gets at one step by `Re`, drawn jointly from the animal's stream
 of that step; single-record traits are then recorded step by step too.
 The records are made at the start of each [`step!`](@ref)
-(`pop.records`); `pop.phenotype` holds the mean of an animal's records
-so far (`NaN` before the first). `pop.R0` is then the covariance of the
-temporary residuals and `pop.PE0` that of the permanent environments
-used by the evaluations.
+([`records`](@ref)); [`phenotypes`](@ref) holds the mean of an animal's
+records so far (`NaN` before the first). `R` of [`covariances`](@ref) is
+then the covariance of the temporary residuals and `PE` that of the
+permanent environments used by the evaluations.
 
 Missing records: `missing` (a number, or one per trait) is the
 probability that a record is missing at random, a keyed draw per animal,
 trait and time step of the record; `unrecorded_herds` the probability
 that a herd never records a trait, a keyed draw per herd and trait. A
 missing record is not made (`NaN` as phenotype, no entry in
-`pop.records`); the values of the other records do not change, as the
+[`records`](@ref)); the values of the other records do not change, as the
 masks have their own keyed streams.
 
 A trait's `sex` (`0` females, `1` males, `2` both) limits its records to
@@ -275,7 +278,11 @@ end
 
 _has_dominance(q::TraitQTL) = any(!iszero, q.dominance)
 
-# the current time step: the cohort of the youngest animals
+"""
+    current_step(pop::Population) -> Int
+
+The current time step: the cohort of the youngest animals.
+"""
 current_step(pop::Population) = ngenerations(pop) - 1
 
 """
@@ -294,7 +301,7 @@ keeps the identity of every animal:
   express the trait; it is drawn at birth, and is available to an
   evaluation only from the trait's `age` on, see [`observed`](@ref);
   with repeated records the mean of the animal's records so far, which
-  are in `pop.records`);
+  are in [`records`](@ref));
   and `ebv_<name>`, the last evaluation (`missing` before one, and for
   animals outside an evaluation window, see [`Scheme`](@ref)).
 
@@ -322,6 +329,91 @@ function pedigree(pop::Population, ids = 1:length(pop))
     end
     return df
 end
+
+_ids(pop::Population, ids) = (ids = collect(Int, ids);
+    all(i -> 1 <= i <= length(pop), ids) || throw(ArgumentError("ids must lie in 1:$(length(pop))")); ids)
+
+"""
+    tbv(pop::Population[, ids]) -> Matrix{Float64}
+
+The true genetic values of the animals `ids` (default: all), one row per
+animal and one column per trait: the sum of the QTL effects (with
+dominance where the trait has it), without the trait's intercept `μ`.
+"""
+BnGStructs.tbv(pop::Population, ids = 1:length(pop)) = pop.tbv[_ids(pop, ids), :]
+
+"""
+    ebv(pop::Population[, ids]) -> Matrix{Float64}
+
+The estimated breeding values of the last evaluation, one row per animal
+of `ids` (default: all) and one column per trait; `NaN` before an
+evaluation and for animals outside the evaluation window (see
+[`Scheme`](@ref)).
+"""
+ebv(pop::Population, ids = 1:length(pop)) = pop.ebv[_ids(pop, ids), :]
+
+"""
+    phenotypes(pop::Population[, ids]) -> Matrix{Float64}
+
+The phenotypes, one row per animal of `ids` (default: all) and one column
+per trait: `NaN` in the sex that does not express a trait and for a
+missing record; with repeated records the mean of the animal's records so
+far (`NaN` before the first). A single record is drawn at birth and is
+available to an evaluation only from the trait's age on; use
+[`records`](@ref) or [`observed`](@ref) for what an evaluation sees.
+"""
+phenotypes(pop::Population, ids = 1:length(pop)) = pop.phenotype[_ids(pop, ids), :]
+
+"""
+    records(pop::Population, t = current_step(pop)) -> DataFrame
+
+Every record made by time step `t`, one row each: `id`, `trait` (its
+name), `step` (the time step of the record) and `value`, ordered by step,
+id and trait. A trait with one record per animal records it at step
+`generation + age` (where [`observed`](@ref)); with repeated records,
+one per step from that age on, at most the trait's `records`.
+"""
+function records(pop::Population, t::Integer = current_step(pop))
+    names_ = [tr.name for tr in pop.traits]
+    if _record_mode(pop)
+        R = pop.records
+        k = findall(<=(t), R.step)
+        return DataFrame(id = Int.(R.id[k]), trait = names_[R.trait[k]], step = Int.(R.step[k]), value = R.y[k])
+    end
+    obs = observed(pop, t)
+    rows = [(Int(pop.generation[i]) + Int(pop.traits[j].age), i, j) for i = 1:length(pop), j = 1:ntraits(pop)
+            if obs[i, j]]
+    sort!(rows)
+    return DataFrame(id = [r[2] for r in rows], trait = [names_[r[3]] for r in rows], step = [r[1] for r in rows],
+        value = [pop.phenotype[r[2], r[3]] for r in rows])
+end
+
+"""
+    traits(pop::Population) -> Vector{Trait}
+    trait_qtl(pop::Population) -> Vector{TraitQTL}
+
+The traits of `pop`, and their QTL (loci, additive and dominance effects,
+intercept), one per trait.
+"""
+traits(pop::Population) = copy(pop.traits)
+@doc (@doc traits) trait_qtl(pop::Population) = copy(pop.qtl)
+
+"""
+    covariances(pop::Population) -> (G, R, PE)
+
+The `k × k` genetic (`G`), residual (`R`) and permanent-environment
+(`PE`) covariance matrices the next evaluation uses: those of the
+founders unless re-estimated (see `reml` in [`Scheme`](@ref)).
+"""
+covariances(pop::Population) = (G = copy(pop.G0), R = copy(pop.R0), PE = copy(pop.PE0))
+
+"""
+    parity(pop::Population[, ids]) -> Vector{Int}
+
+The number of time steps in which each dam of `ids` (default: all) has
+had offspring so far (`0` for sires).
+"""
+parity(pop::Population, ids = 1:length(pop)) = Int.(pop.parity[_ids(pop, ids)])
 
 """
     alive(pop::Population, t = current_step(pop)) -> Vector{Int}
@@ -588,12 +680,12 @@ A selection and mating scheme, applied every time step:
   contributions; an `ArgumentError` when the selected parents cannot
   have `noff` offspring under the limits;
 - `max_parity`: at most this many time steps with offspring per dam
-  (`0`: no limit; `pop.parity` counts them);
+  (`0`: no limit; [`parity`](@ref) counts them);
 - `pair_limit`: at most this many offspring per sire–dam pair (`0`: no
   limit; `1`: no full sibs, a factorial-type design), with `:random` or
   `:min_coancestry`;
-- `record_meiosis`: keep the crossover records of every cohort in
-  `pop.meioses`, for realized IBD from founder segments
+- `record_meiosis`: keep the crossover records of every cohort
+  ([`meioses`](@ref)), for realized IBD from founder segments
   ([`founder_segments`](@ref)); about 8 bytes per crossover;
 - `report_reliability`: report the mean reliability of the candidates of
   each step from the prediction error variances of the evaluation
@@ -818,7 +910,7 @@ end
 """
     evaluate!(pop::Population, scheme::Scheme) -> Union{Nothing, MME}
 
-Fill `pop.ebv` for every animal and trait by the scheme's evaluation at
+Set the EBV ([`ebv`](@ref)) of every animal and trait by the scheme's evaluation at
 the current time step. For `:pblup`, `:gblup` and `:ssgblup` the mixed-model
 equations over the records available (see [`observed`](@ref)) are built
 with Breeding.jl and solved directly: ``y = 1\\mu + Za + e`` with
@@ -826,8 +918,8 @@ with Breeding.jl and solved directly: ``y = 1\\mu + Za + e`` with
 trait-major with an intercept per recorded trait,
 ``\\operatorname{var}(a) = G_0 \\otimes K`` and ``R_0`` among the records
 of one animal (missing records handled exactly). The covariance
-components are `pop.G0` and `pop.R0`, first re-estimated by REML if
-`scheme.reml`. The equations are returned for prediction error variances;
+components are `G` and `R` of [`covariances`](@ref), first re-estimated
+by REML if `scheme.reml`. The equations are returned for prediction error variances;
 their animal effects are in the rows of [`evaluation_view`](@ref), which
 with `scheme.window > 0` covers the recent cohorts and their ancestors
 only (the EBV of the other animals is `NaN`).

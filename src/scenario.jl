@@ -1002,3 +1002,13 @@ function run_scenario(s::Scenario; replicates=1:s.replicates)
     return reduce(vcat, parts)
 end
 run_scenario(path::AbstractString; kw...) = run_scenario(read_scenario(path); kw...)
+
+# a VariantMap from a map table
+_to_variant_map(vm::VariantMap) = vm
+_to_variant_map(df::DataFrame) = VariantMap(
+    Int8.(df.chr),
+    UInt32.(df.pos),
+    Char.(df.ref),
+    Char.(df.alt),
+    hasproperty(df, :frq) ? Float32.(df.frq) : Float32[],
+)
