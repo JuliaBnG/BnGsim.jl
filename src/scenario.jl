@@ -55,9 +55,13 @@ canonical form lists `name`, `chromosome` and `morgan`.
 variation: `ne` diploids for `nt` generations at `mr` mutations per 1e8 bp
 per meiosis (`1.0`); then `decline` (`[]`), the census sizes of further
 generations (e.g. a decline to a breed); and `nid`, the founders sampled
-from the last generation. With `shared_history` (`true`) one historical
-population serves every replicate, each sampling its own founders;
-otherwise each replicate runs its own. `herds` (`1`): the number of herds
+from the last generation. With `shared_history` (`true`) `histories`
+(`1`) historical populations serve the replicates, replicate `r` using
+number ((r - 1) mod `histories`) + 1, each replicate sampling its own
+founders; otherwise each replicate runs its own. `history_dir` (`null`):
+read those histories from a directory written by `bngsim history`
+([`write_histories`](@ref)), whose historical parameters must equal the
+scenario's (the path is relative to the working directory). `herds` (`1`): the number of herds
 the founders are spread over at random; offspring are born in their
 dam's herd (contemporary groups, see `c2` of the traits). `popsize` (`null`):
 the census trajectory of the `nt` historical generations, `{"bottleneck":
@@ -80,7 +84,10 @@ allele frequency above `maf` among the founders; `from` `"neutral"`: `nlc`
 loci sampled from the variants of the history, or `"history"`: the loci of
 `founders.selection` segregating among the founders above `maf`, with
 their historical effects times one factor ([`scale_qtl`](@ref)), one
-trait only, `nlc` not given); `chip` (`null`), the same for
+trait only; with `from = "history"`, `nlc` (`null`: all) draws that many
+of those loci at random, and `rho` (`1.0`, in `[-1, 1]`) correlates the
+breeding effects with the historical ones: `rho z_a + √(1 - rho²) z`, `z`
+new effects from the trait's `da`, both standardised); `chip` (`null`), the same for
 the genotyping panel, needed by `:gblup` and `:ssgblup`; `overlap`
 (`"disjoint"`): whether chip loci may also be QTL (`"allowed"`).
 
@@ -133,8 +140,9 @@ struct Scenario
     steps::Int
     species::@NamedTuple{name::String, chromosome::Vector{Int}, morgan::Vector{Float64}}
     founders::@NamedTuple{ne::Int, nt::Int, mr::Float64, decline::Vector{Int}, nid::Int, shared_history::Bool,
-        herds::Int, popsize::Union{Nothing,NamedTuple}, sexratio::Float64, selection::Union{Nothing,NamedTuple}}
-    qtl::@NamedTuple{nlc::Int, maf::Float64, from::Symbol}
+        herds::Int, popsize::Union{Nothing,NamedTuple}, sexratio::Float64, selection::Union{Nothing,NamedTuple},
+        histories::Int, history_dir::String}
+    qtl::@NamedTuple{nlc::Int, maf::Float64, from::Symbol, rho::Float64}
     chip::Union{Nothing,@NamedTuple{nlc::Int, maf::Float64}}
     overlap::Symbol
     traits::Vector{@NamedTuple{name::String, h2::Float64, sigma_a::Float64, mu::Float64, sex::Int, age::Int,
@@ -442,7 +450,7 @@ function _founders(c, d)
     d === nothing && return nothing
     path = "founders"
     _known!(c, d, path, ["ne", "nt", "mr", "decline", "nid", "shared_history", "herds", "popsize", "sexratio",
-        "selection"])
+        "selection", "histories", "history_dir"])
     ne = _get(c, d, path, "ne", :int; check=_atleast(2))
     nt = _get(c, d, path, "nt", :int; check=_positive)
     mr = _get(c, d, path, "mr", :float; default=1.0,
@@ -458,14 +466,20 @@ function _founders(c, d)
     popsize = pd === nothing ? nothing : _popsize(c, pd, "$path.popsize")
     sd = _object(c, d, path, "selection"; required=false)
     selection = sd === nothing ? nothing : _selection(c, sd, "$path.selection")
-    any(isnothing, (ne, nt, mr, decline, nid, shared, herds, sexratio)) && return nothing
+    nh = _get(c, d, path, "histories", :int; default=1, check=_positive)
+    hdir = _get(c, d, path, "history_dir", :string; default="", nullable=true, null_as="")
+    any(isnothing, (ne, nt, mr, decline, nid, shared, herds, sexratio, nh, hdir)) && return nothing
+    if !shared && (nh > 1 || !isempty(hdir))
+        _err!(c, path, "histories > 1 and history_dir need shared_history = true (each replicate otherwise runs its own)")
+        return nothing
+    end
     pd !== nothing && popsize === nothing && return nothing
     sd !== nothing && selection === nothing && return nothing
     last = !isempty(decline) ? decline[end] : popsize === nothing ? ne : _trajectory(popsize, ne)(nt)
     nid <= last || (_err!(c, "$path.nid", "exceeds the $last individuals of the last historical generation");
         return nothing)
     return (ne=ne, nt=nt, mr=mr, decline=decline, nid=nid, shared_history=shared, herds=herds, popsize=popsize,
-        sexratio=sexratio, selection=selection)
+        sexratio=sexratio, selection=selection, histories=nh, history_dir=hdir)
 end
 
 # founders.popsize: the census trajectory of the historical generations,
@@ -534,27 +548,28 @@ end
 
 function _panel(c, d, path; from=false)
     if from
-        _known!(c, d, path, ["nlc", "maf", "from"])
+        _known!(c, d, path, ["nlc", "maf", "from", "rho"])
         src = _get(c, d, path, "from", :symbol; default=:neutral, choices=[:neutral, :history])
         src === nothing && return nothing
         if src === :history
-            haskey(d, "nlc") && (_err!(c, "$path.nlc", "not used with \"from\": \"history\" (the trait loci are the QTL)");
-                return nothing)
+            nlc = _get(c, d, path, "nlc", :int; default=0, nullable=true, null_as=0, check=_nonneg)
             maf = _get(c, d, path, "maf", :float; default=0.0, check=_maf)
-            maf === nothing && return nothing
-            return (nlc=0, maf=maf, from=:history)
+            rho = _get(c, d, path, "rho", :float; default=1.0, check=x -> -1 <= x <= 1 ? nothing : "must lie in [-1, 1]")
+            any(isnothing, (nlc, maf, rho)) && return nothing
+            return (nlc=nlc, maf=maf, from=:history, rho=rho)
         end
+        haskey(d, "rho") && (_err!(c, "$path.rho", "applies to \"from\": \"history\" only"); return nothing)
     else
         _known!(c, d, path, ["nlc", "maf"])
     end
     nlc = _get(c, d, path, "nlc", :int; check=_positive)
     maf = _get(c, d, path, "maf", :float; default=0.0, check=_maf)
     (nlc === nothing || maf === nothing) && return nothing
-    return from ? (nlc=nlc, maf=maf, from=:neutral) : (nlc=nlc, maf=maf)
+    return from ? (nlc=nlc, maf=maf, from=:neutral, rho=1.0) : (nlc=nlc, maf=maf)
 end
 
 function _loci(c, d, k)
-    bad = (qtl=(nlc=0, maf=0.0, from=:neutral), chip=nothing, overlap=:disjoint)
+    bad = (qtl=(nlc=0, maf=0.0, from=:neutral, rho=1.0), chip=nothing, overlap=:disjoint)
     d === nothing && return bad
     path = "loci"
     _known!(c, d, path, ["qtl", "chip", "overlap"])
@@ -716,9 +731,11 @@ function scenario_dict(s::Scenario)
             "mu" => f.selection.mu, "sigma_e" => f.selection.sigma_e,
             "fitness" => f.selection.fitness === :stabilizing ?
                 O("model" => "stabilizing", "theta" => f.selection.theta, "omega2" => f.selection.omega2) :
-                O("model" => "directional", "beta" => f.selection.beta)))
+                O("model" => "directional", "beta" => f.selection.beta)),
+        "histories" => f.histories, "history_dir" => isempty(f.history_dir) ? nothing : f.history_dir)
     panel(p) = p === nothing ? nothing : O("nlc" => p.nlc, "maf" => p.maf)
-    qpanel = s.qtl.from === :history ? O("from" => "history", "maf" => s.qtl.maf) :
+    qpanel = s.qtl.from === :history ?
+             O("from" => "history", "nlc" => s.qtl.nlc == 0 ? nothing : s.qtl.nlc, "maf" => s.qtl.maf, "rho" => s.qtl.rho) :
              O("nlc" => s.qtl.nlc, "maf" => s.qtl.maf, "from" => "neutral")
     lo = O("qtl" => qpanel, "chip" => panel(s.chip), "overlap" => String(s.overlap))
     tr = [O("name" => t.name, "h2" => t.h2, "sigma_a" => t.sigma_a, "mu" => t.mu, "sex" => t.sex, "age" => t.age,
@@ -760,6 +777,20 @@ _species_of(s::Scenario) = GenericSpecies(s.species.name, s.species.chromosome; 
 # Stages of the founder domain.
 const _STAGE_HISTORY, _STAGE_DECLINE, _STAGE_SAMPLE, _STAGE_NUCLEOTIDES = 0x0001, 0x0002, 0x0003, 0x0004
 const _STAGE_TRAIT_LOCI = 0x0005
+const _STAGE_QTL_SUBSET = 0x0001        # Domain.GENOTYPING, stage 1: QTL drawn from the trait loci
+
+# The effects of the breeding trait at the historical trait loci: the
+# historical effects `a` when `rho = 1`; otherwise `rho z_a + √(1 - rho²) z`,
+# with `z_a` the historical effects standardised by their SD and `z` new
+# effects drawn from the trait's distribution and standardised, so that
+# the effects of the two traits correlate by about `rho` across the QTL
+# (a breeding trait only partly shaped by the past selection).
+function _breeding_effects(a, rho, t, rng)
+    rho == 1 && return a
+    z = Float64.(rand(rng, t.da, length(a)))
+    z = (z .- mean(z)) ./ std(z)
+    return rho .* (a ./ std(a)) .+ sqrt(1 - rho^2) .* z
+end
 
 # Placeholder nucleotides (`ref` and a different `alt`) from `rng`. The map
 # of `founder_haplotypes` draws them from the global generator, so they
@@ -775,11 +806,30 @@ function _nucleotides!(vm::VariantMap, rng::AbstractRNG)
     return vm
 end
 
-# The historical population of replicate `r` (0: shared by all).
-function _history(s::Scenario, sp::Species, r::Integer)
+# The historical population replicate `r` uses: with shared histories,
+# number ((r - 1) mod K) + 1 of the K of the scenario; otherwise its own,
+# numbered r.
+_history_index(s::Scenario, r::Integer) = s.founders.shared_history ? (r - 1) % s.founders.histories + 1 : r
+
+# The key of history `k`: shared histories are keyed by replicate 0 and
+# entity k - 1 (so history 1 is the single shared history of earlier
+# versions); a replicate's own history by its replicate number.
+_history_key(s::Scenario, k::Integer) = s.founders.shared_history ?
+    SimKey(s.seed; replicate=0, domain=Domain.FOUNDERS, entity=k - 1) : SimKey(s.seed; replicate=k, domain=Domain.FOUNDERS)
+
+# History `k` of `s` and the loci of its trait under selection (`nothing`
+# without one): simulated, or read from `founders.history_dir`.
+function _history_of(s::Scenario, k::Integer)
+    isempty(s.founders.history_dir) || return _load_history(s, k)
+    sp = _species_of(s)
+    return (res=_history(s, sp, k), loci=s.founders.selection === nothing ? nothing : _trait_loci(s, k))
+end
+
+# The historical population number `k` (see `_history_index`).
+function _history(s::Scenario, sp::Species, k::Integer)
     f = s.founders
-    key = SimKey(s.seed; replicate=r, domain=Domain.FOUNDERS)
-    kw = _history_kw(s, r)
+    key = _history_key(s, k)
+    kw = _history_kw(s, k)
     traj = f.popsize === nothing ? (;) : (; popsize=_trajectory(f.popsize, f.ne))
     res = fisher_wright(sp, f.ne, f.nt, f.mr; result=true, rng=keyed_rng(SimKey(key; stage=_STAGE_HISTORY)),
         traj..., kw...)
@@ -800,11 +850,11 @@ function _history_kw(s::Scenario, r::Integer)
     return (; kw..., fitness=TraitFitness(_trait_loci(s, r); σe=sel.sigma_e, fitness=fit))
 end
 
-# The loci of the historical trait of `s` (replicate `r` of the history).
-function _trait_loci(s::Scenario, r::Integer)
+# The loci of the historical trait of `s` in history `k`.
+function _trait_loci(s::Scenario, k::Integer)
     sel = s.founders.selection
     trait_loci(s.species.chromosome, sel.nsites; a=_dist(sel.da), μ=sel.mu,
-        rng=keyed_rng(SimKey(s.seed; replicate=r, domain=Domain.FOUNDERS, stage=_STAGE_TRAIT_LOCI)))
+        rng=keyed_rng(SimKey(_history_key(s, k); stage=_STAGE_TRAIT_LOCI)))
 end
 
 _dist(d) = d.family === :normal ? Normal(d.a, d.b) :
@@ -834,13 +884,16 @@ end
 # the scheme and the meiosis map.
 function _setup_replicate(s::Scenario, r::Integer, history)
     sp = _species_of(s)
-    h = history !== nothing ? history : _history(s, sp, s.founders.shared_history ? 0 : r)
+    k = _history_index(s, r)
+    hist = history === nothing ? _history_of(s, k) :
+           history isa FisherWrightResult ?
+           (res=history, loci=s.founders.selection === nothing ? nothing : _trait_loci(s, k)) : history
+    h = hist.res
     key = SimKey(s.seed; replicate=r)
     srng = keyed_rng(SimKey(key; domain=Domain.FOUNDERS, stage=_STAGE_SAMPLE))
     fromhist = s.qtl.from === :history
     if fromhist
-        hr = s.founders.shared_history ? 0 : r
-        xy, lmp, trows, teff = founder_haplotypes(h, s.founders.nid, _trait_loci(s, hr); rng=srng)
+        xy, lmp, trows, teff = founder_haplotypes(h, s.founders.nid, hist.loci; rng=srng)
     else
         xy, lmp = founder_haplotypes(h, s.founders.nid; rng=srng)
     end
@@ -855,6 +908,12 @@ function _setup_replicate(s::Scenario, r::Integer, history)
         q = [k for k in eachindex(trows) if s.qtl.maf < frq[trows[k]] < 1 - s.qtl.maf]
         isempty(q) && throw(ArgumentError("no locus of the historical trait segregates among the founders " *
             "above maf = $(s.qtl.maf)"))
+        if s.qtl.nlc > 0
+            length(q) >= s.qtl.nlc || throw(ArgumentError("only $(length(q)) loci of the historical trait segregate " *
+                "among the founders above maf = $(s.qtl.maf); loci.qtl.nlc asks for $(s.qtl.nlc)"))
+            q = sort(sample(keyed_rng(SimKey(key; domain=Domain.GENOTYPING, stage=_STAGE_QTL_SUBSET)), q,
+                s.qtl.nlc; replace=false))
+        end
         ps = Any[(rows=Int32.(trows[q]), effects=teff[q])]
         if s.chip !== nothing
             cvm = s.overlap === :disjoint ? (f2 = copy(frq); f2[trows] .= 0;
@@ -870,7 +929,8 @@ function _setup_replicate(s::Scenario, r::Integer, history)
     ts = [Trait(t.name; sex=t.sex, age=t.age, h²=t.h2, μ=t.mu, σₐ=t.sigma_a, da=_dist(t.da)) for t in s.traits]
     qrng = keyed_rng(SimKey(key; domain=Domain.QTL))
     pop = if length(ts) == 1
-        q1 = fromhist ? scale_qtl(hap, panels[1].rows, panels[1].effects, ts[1]) : eqtl(hap, panels[1], ts[1]; rng=qrng)
+        q1 = fromhist ? scale_qtl(hap, panels[1].rows, _breeding_effects(panels[1].effects, s.qtl.rho, ts[1], qrng), ts[1]) :
+             eqtl(hap, panels[1], ts[1]; rng=qrng)
         founder_population(hap, q1, ts[1], key;
             herds=s.founders.herds, c2=s.traits[1].c2, records=s.traits[1].records,
             repeatability=s.traits[1].repeatability, missing=s.traits[1].missing,
@@ -899,10 +959,12 @@ shared historical population is simulated once.
 function run_scenario(s::Scenario; replicates=1:s.replicates)
     all(r -> 1 <= r <= s.replicates, replicates) ||
         throw(ArgumentError("replicates must lie in 1:$(s.replicates)"))
-    h = s.founders.shared_history ? _history(s, _species_of(s), 0) : nothing
+    hists = Dict{Int,Any}()
     parts = map(collect(replicates)) do r
+        k = _history_index(s, r)
+        h = s.founders.shared_history ? get!(() -> _history_of(s, k), hists, k) : nothing
         df = run_replicate(s, r; history=h).summary
-        insertcols!(df, 1, :replicate => fill(r, nrow(df)))
+        insertcols!(df, 1, :replicate => fill(r, nrow(df)), :history => fill(k, nrow(df)))
         df
     end
     return reduce(vcat, parts)

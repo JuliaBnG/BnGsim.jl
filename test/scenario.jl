@@ -37,8 +37,8 @@ end
     @test s isa Scenario && s.name == "minimal" && s.seed == 2026 && s.replicates == 1 && s.steps == 3
     @test s.species.chromosome == [20_000_000, 10_000_000] && s.species.morgan == [0.2, 0.1]
     @test isequal(s.founders, (ne=100, nt=500, mr=1.0, decline=Int[], nid=50, shared_history=true, herds=1,
-        popsize=nothing, sexratio=NaN, selection=nothing))
-    @test s.qtl == (nlc=50, maf=0.01, from=:neutral) && s.chip === nothing && s.overlap === :disjoint
+        popsize=nothing, sexratio=NaN, selection=nothing, histories=1, history_dir=""))
+    @test s.qtl == (nlc=50, maf=0.01, from=:neutral, rho=1.0) && s.chip === nothing && s.overlap === :disjoint
     @test s.traits[1] == (name="y", h2=0.3, sigma_a=1.0, mu=0.0, sex=2, age=0, da=(family=:normal, a=0.0, b=1.0, c=0.0, sign=:positive), c2=0.0, records=1,
         repeatability=0.3, missing=0.0, unrecorded_herds=0.0)
     @test s.genetic_correlation == ones(1, 1) && s.residual_correlation == ones(1, 1)
@@ -151,8 +151,8 @@ end
     all2 = run_scenario(t)
     @test sort(unique(all2.replicate)) == [1, 2]
     one = run_replicate(t, 2)
-    @test isequal(one.summary, all2[all2.replicate .== 2, 2:end])
-    @test !isequal(all2[all2.replicate .== 1, 2:end], all2[all2.replicate .== 2, 2:end])
+    @test isequal(one.summary, all2[all2.replicate .== 2, 3:end])
+    @test !isequal(all2[all2.replicate .== 1, 3:end], all2[all2.replicate .== 2, 3:end])
     @test length(one.chip) == 200 && isempty(intersect(one.chip, one.qtl)) && length(one.qtl) == 40
     @test ntraits(one.population) == 2 && length(one.population) == 40 + 2 * 40
     # Without a shared history each replicate runs its own.

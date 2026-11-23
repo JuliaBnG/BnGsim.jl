@@ -11,6 +11,7 @@ bngsim run SCENARIO.json --out DIR [--replicates A:B] [--memory-limit SIZE] [--c
            [--archive none|chip|qtl|all]
 bngsim resume DIR
 bngsim merge DIR... --out DIR
+bngsim history SCENARIO.json --out DIR
 bngsim version [--json]
 ```
 
@@ -69,6 +70,32 @@ are byte-identical whatever the number of threads: for
 compiled code change the last bits of floating-point sums: Julia started
 with `--check-bounds=yes` (as `Pkg.test` does) gives other last digits
 than the default. Everything about the run itself is in `provenance.json`.
+
+## Historical populations
+
+The replicates of a run share its historical populations: with
+`founders.histories = K` (default 1), replicate `r` uses history
+((r − 1) mod K) + 1 and samples its own founders from it. Replicates of
+one history are not independent draws of the history, so with `K > 1`
+(and several replicates per history) `aggregate.csv` adds, per summary,
+the standard deviation of the history means (`_sdh`) and the standard
+error over histories (`_seh`): `_se` measures the variation of founder
+sampling and breeding only, `_seh` also the variation between
+histories. Comparisons of schemes on the same histories are paired and
+need not include it.
+
+A large history takes long to simulate. `bngsim history SCENARIO.json
+--out DIR` simulates the `K` histories once (on a large host, e.g.) and
+stores them: `history-<k>.fwr` (FisherWright's result format) and
+`manifest.json` (the historical parameters, the SHA-256 of each file and
+the loci of a trait under selection). A scenario with
+`founders.history_dir = DIR` reads them; `validate`, `run` and `resume`
+refuse a directory whose parameters (species, `ne`, `nt`, `mr`,
+`decline`, `popsize`, `sexratio`, `selection`) or number of histories
+differ from the scenario's, or whose files changed. The seed may differ:
+a run with stored histories equals a run that simulates the same
+histories. `provenance.json` records the directory and the SHA-256 of
+its manifest.
 
 ## Replicates on several hosts
 

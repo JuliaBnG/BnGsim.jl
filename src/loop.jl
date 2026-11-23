@@ -1416,7 +1416,26 @@ function _qtl_status(hap::Haplotype, q::TraitQTL)
     nz = findall(!iszero, q.additive)
     p = vec(sum(dosage(hap, q.loci[nz]); dims = 2)) ./ hap.nhp
     fav = [a > 0 ? x : 1 - x for (a, x) in zip(q.additive[nz], p)]
-    return (qtl_seg = count(x -> 0 < x < 1, fav), qtl_fixed = count(==(1), fav), qtl_lost = count(==(0), fav))
+    return (qtl_seg = count(x -> 0 < x < 1, fav), qtl_fixed = count(==(1), fav), qtl_lost = count(==(0), fav),
+        _qtl_architecture(p, q.additive[nz])...)
+end
+
+# The architecture of the QTL segregating in a cohort, from their allele
+# frequencies `p` and effects `a`: the mean minor allele frequency; α, the
+# slope of log a² on log 2p(1-p) (effect variance ∝ [2p(1-p)]^α; negative
+# when large effects are rare, as under purifying or stabilizing
+# selection; NaN with fewer than three QTL); and the share of the genic
+# variance 2p(1-p)a² in the largest tenth of them.
+function _qtl_architecture(p, a)
+    seg = findall(x -> 0 < x < 1, p)
+    isempty(seg) && return (qtl_maf = NaN, qtl_alpha = NaN, qtl_top10 = NaN)
+    ps, as = p[seg], a[seg]
+    h = 2 .* ps .* (1 .- ps)
+    x, y = log.(h), log.(as .^ 2)
+    α = length(seg) >= 3 && var(x) > 0 ? cov(x, y) / var(x) : NaN
+    v = sort(h .* as .^ 2; rev = true)
+    top = sum(v[1:ceil(Int, length(v) / 10)]) / sum(v)
+    return (qtl_maf = mean(min.(ps, 1 .- ps)), qtl_alpha = α, qtl_top10 = top)
 end
 
 """
@@ -1429,7 +1448,12 @@ traits, then also `mean_<name>`, `var_<name>` per trait and the genetic
 correlation `rg_<a>_<b>` of each pair within the cohort); the QTL with a
 non-zero effect on that genetic value (on ``H``, the effects ``w'a``) at
 which the favourable allele is segregating (`qtl_seg`), fixed
-(`qtl_fixed`) or lost (`qtl_lost`) in the cohort; mean pedigree
+(`qtl_fixed`) or lost (`qtl_lost`) in the cohort, and the architecture
+of the segregating ones: their mean minor allele frequency `qtl_maf`,
+`qtl_alpha`, the slope of ``\\log a^2`` on ``\\log 2p(1-p)`` (effect
+variance ``\\propto [2p(1-p)]^\\alpha``; negative when large effects are
+rare), and `qtl_top10`, the share of the genic variance in the largest
+tenth of them; mean pedigree
 inbreeding `F` and mean pedigree `coancestry` ``\\bar\\theta_g`` over all
 pairs of the cohort, self-coancestry ``(1 + F_i)/2`` included (founders
 unrelated and non-inbred); the loss of heterozygosity `Fhet`; the

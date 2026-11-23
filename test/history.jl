@@ -21,7 +21,7 @@ end
     @test scenario_json(parse_scenario(scenario_json(s))) == scenario_json(s)
     # demography: the census follows the trajectory, the sex ratio is fixed
     sp = BnGsim._species_of(s)
-    h = BnGsim._history(s, sp, 0)
+    h = BnGsim._history(s, sp, 1)
     traj = BnGsim._trajectory(s.founders.popsize, 80)
     N = BnGsim.census(h)
     @test N == [80; traj.(1:150)] && N[101:105] == fill(30, 5) && N[end] == 80
@@ -29,13 +29,13 @@ end
     g = _history_doc(; selection = false)
     g["founders"]["popsize"] = Dict("growth" => Dict("rate" => 0.02, "limit" => 200))
     sg = parse_scenario(g)
-    Ng = BnGsim.census(BnGsim._history(sg, sp, 0))
+    Ng = BnGsim.census(BnGsim._history(sg, sp, 1))
     @test issorted(Ng) && Ng[end] == BnGsim._trajectory(sg.founders.popsize, 80)(150) && Ng[end] <= 200
 
     # the trait's alleles merged into the founder haplotypes: rows of trait
     # loci carry the derived alleles of `selected_haplotypes`, neutral rows
     # the neutral ones, and the effects are those of the loci
-    loci = BnGsim._trait_loci(s, 0)
+    loci = BnGsim._trait_loci(s, 1)
     xy, lmp, rows, eff = BnGsim.founder_haplotypes(h, 40, loci; rng = Xoshiro(3))
     xy0, lmp0 = BnGsim.founder_haplotypes(h, 40; rng = Xoshiro(3))           # the same founders, neutral only
     @test !isempty(rows) && all(r -> insorted(lmp.pos[r], loci.pos), rows)
@@ -63,7 +63,7 @@ end
     # errors
     for (path, v) in ((["founders", "popsize"], Dict("bottleneck" => Dict("size" => 30, "start" => 1, "duration" => 1),
                           "growth" => Dict("rate" => 0.1))),
-                      (["loci", "qtl"], Dict("from" => "history", "nlc" => 10)),
+                      (["loci", "qtl"], Dict("from" => "history", "rho" => 1.5)),
                       (["founders", "sexratio"], 1.0),
                       (["founders", "selection", "mu"], 0.0))
         d = _history_doc()

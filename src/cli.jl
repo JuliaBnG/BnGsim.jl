@@ -41,6 +41,7 @@ usage: bngsim validate SCENARIO.json
                   [--archive none|chip|qtl|all]
        bngsim resume DIR
        bngsim merge DIR... --out DIR
+       bngsim history SCENARIO.json --out DIR
        bngsim version [--json]
 
 SIZE is bytes, or a number with K, M, G or T (powers of 1024), e.g. 16G.
@@ -132,6 +133,12 @@ code ([`ExitCode`](@ref)). `bin/bngsim` calls it as
   `OUT`: `scenario.json`, `summary.csv` (rows ordered by replicate, the
   bytes of a single run of all of them), `aggregate.csv` and
   `provenance.json` listing the runs merged.
+- `history SCENARIO.json --out DIR`: simulate the `founders.histories`
+  historical populations of the scenario once and store them in `DIR`
+  ([`write_histories`](@ref)); a scenario with `founders.history_dir =
+  DIR` and the same historical parameters then reads them instead of
+  simulating. `validate`, `run` and `resume` refuse a history directory
+  whose manifest does not fit the scenario (exit code 3 or 4).
 - `resume DIR`: continue a stopped or killed run from its last saved
   state (removing `DIR/CANCEL`). The outputs are those of an
   uninterrupted run, byte for byte; `provenance.json` lists every session.
@@ -156,6 +163,7 @@ function cli(args::AbstractVector{<:AbstractString}; stdout::IO=Base.stdout, std
         cmd == "estimate" && return _cli_estimate(rest, stdout, stderr)
         cmd == "resume" && return _cli_resume(rest, stdout, stderr)
         cmd == "merge" && return _cli_merge(rest, stdout, stderr)
+        cmd == "history" && return _cli_history(rest, stdout, stderr)
         cmd == "version" && return _cli_version(rest, stdout, stderr)
         cmd in ("-h", "--help", "help") && (println(stdout, _CLI_USAGE); return ExitCode.OK)
         return _usage(stderr, "unknown command \"$cmd\"")
@@ -187,14 +195,49 @@ function _load(path, stdout, stderr)
         _emit(stdout, O("status" => "invalid", "errors" => ["no such file: $path"]))
         return ExitCode.INVALID_SCENARIO
     end
-    try
-        return parse_scenario(read(path, String))
+    s = try
+        parse_scenario(read(path, String))
     catch e
         e isa ScenarioError || rethrow()
         println(stderr, sprint(showerror, e))
         _emit(stdout, O("status" => "invalid", "errors" => e.errors))
         return ExitCode.INVALID_SCENARIO
     end
+    msg = check_histories(s)
+    if msg !== nothing
+        println(stderr, "bngsim: founders.history_dir: ", msg)
+        _emit(stdout, O("status" => "invalid", "errors" => ["founders.history_dir: $msg"]))
+        return ExitCode.INVALID_SCENARIO
+    end
+    return s
+end
+
+function _cli_history(args, stdout, stderr)
+    O = JSON.Object{String,Any}
+    i = findfirst(==("--out"), args)
+    (i === nothing || i == length(args) || length(args) != 3) && return _usage(stderr, "history takes SCENARIO.json --out DIR")
+    out = args[i+1]
+    path = args[i == 1 ? 3 : 1]
+    s = _load(path, stdout, stderr)
+    s isa Integer && return s
+    s.founders.shared_history || return _reject(stdout, stderr, "stored histories are shared: set founders.shared_history = true")
+    isempty(s.founders.history_dir) || return _reject(stdout, stderr, "the scenario reads its histories from history_dir")
+    ispath(out) && !(isdir(out) && isempty(readdir(out))) &&
+        return _reject(stdout, stderr, "output directory $out exists and is not empty; results are never overwritten")
+    created = !ispath(out)
+    m = try
+        write_histories(out, s)
+    catch e
+        e isa ArgumentError || e isa ErrorException || rethrow()
+        msg = sprint(showerror, e)
+        println(stderr, "bngsim: the histories stopped: ", msg)
+        created ? rm(out; recursive=true, force=true) : foreach(f -> rm(joinpath(out, f); force=true), readdir(out))
+        _emit(stdout, O("status" => "failed", "message" => msg))
+        return ExitCode.SIMULATION_FAILED
+    end
+    _emit(stdout, O("status" => "completed", "directory" => out, "histories" => s.founders.histories,
+        "manifest_sha256" => _sha256_file(m)))
+    return ExitCode.OK
 end
 
 function _cli_validate(args, stdout, stderr)
@@ -313,6 +356,8 @@ function _cli_resume(args, stdout, stderr)
         return _reject(stdout, stderr, e.msg)
     end
     s = parse_scenario(run.scenario)
+    msg = check_histories(s)
+    msg === nothing || return _reject(stdout, stderr, "founders.history_dir: $msg")
     # The request to stop has been served; resuming withdraws it.
     rm(joinpath(out, "CANCEL"); force=true)
     return _drive(out, s, run, stdout, stderr; created=false)
@@ -371,6 +416,10 @@ function _drive(out, s, run, stdout, stderr; created, should_stop=(r, g) -> _can
         "threads" => Threads.nthreads(), "started" => sessions[1]["started"], "finished" => session["finished"],
         "seconds" => seconds, "checkpoint_every" => run.checkpoint_every, "sessions" => sessions,
         "outputs" => hashes)
+    if !isempty(s.founders.history_dir)
+        prov["history"] = O("directory" => abspath(s.founders.history_dir),
+            "manifest_sha256" => _sha256_file(joinpath(s.founders.history_dir, "manifest.json")))
+    end
     if _run_archive(run) !== nothing
         dir = joinpath(out, "archive")
         prov["archive"] = O("panel" => String(_run_archive(run)), "files" => O(relpath(f, out) => _sha256_file(f)
