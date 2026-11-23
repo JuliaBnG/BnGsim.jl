@@ -1,5 +1,47 @@
 # BnGsim.jl release notes
 
+## v0.30.0 (2026-11-23)
+
+### New
+
+- Several historical populations per run: `founders.histories = K`;
+  replicate `r` uses history ((r − 1) mod K) + 1 (history 1 is the single
+  shared history of earlier versions, unchanged). The summary gains a
+  column `history`. With replicates nested in histories, `aggregate`
+  adds `histories` and, per summary, `_sdh` (SD of the history means) and
+  `_seh` (SE over histories), which include the variation between
+  histories that `_se` leaves out.
+- Stored histories: `bngsim history SCENARIO --out DIR` and
+  `write_histories(dir, s)` write the K histories once (FisherWright's
+  result format, FisherWright 0.10 or later) with a manifest of the
+  historical parameters, file hashes and trait loci; `founders.history_dir`
+  reads them, whatever the seed. `check_histories`, and `validate`,
+  `run` and `resume`, refuse a directory whose parameters, number of
+  histories or file hashes do not fit; the provenance records its
+  manifest hash. A run with stored histories equals one that simulates
+  them (tested).
+- QTL from history: `loci.qtl.nlc` draws that many of the segregating
+  trait loci (keyed), and `loci.qtl.rho` (default 1) correlates the
+  breeding effects with the historical ones, `rho z_a + √(1 − rho²) z`,
+  for a breeding trait only partly shaped by past selection. Effects are
+  otherwise only scaled by one common factor (σa), so the effect–frequency
+  relation of the history is kept.
+- QTL architecture per cohort in the summary: `qtl_maf` (mean minor
+  allele frequency of the segregating QTL), `qtl_alpha` (slope of
+  log a² on log 2p(1 − p); effect variance ∝ [2p(1 − p)]^α) and
+  `qtl_top10` (share of the genic variance in the largest tenth of the
+  QTL); aggregated over replicates, they serve to calibrate a history to
+  a target architecture.
+
+### Changed
+
+- `summary.csv` gains `history`, `qtl_maf`, `qtl_alpha` and `qtl_top10`;
+  the other columns are unchanged (checked against 0.29.0). Readers by
+  position must be updated.
+- The canonical JSON of every scenario now lists `founders.histories`,
+  `founders.history_dir`, `loci.qtl.rho` (and `nlc` with QTL from
+  history), so its SHA-256 changes.
+
 ## v0.29.0 (2026-11-23)
 
 ### New

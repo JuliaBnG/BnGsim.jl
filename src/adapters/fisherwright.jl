@@ -10,7 +10,8 @@ using Random: AbstractRNG
 const PACKAGE = FisherWright
 
 export fisher_wright, muts2bitarray, FisherWrightResult, census, dense_haplotypes, bottleneck, growth,
-    RandomMating, trait_loci, TraitLoci, TraitFitness, Stabilizing, Directional
+    RandomMating, trait_loci, TraitLoci, TraitFitness, Stabilizing, Directional, write_history_file,
+    read_history_file
 
 """
     census(res::FisherWrightResult) -> Vector{Int}
@@ -31,6 +32,25 @@ accepts one (0.10 and later), from the global generator before.
 """
 dense_haplotypes(muts, ends; rng::AbstractRNG) =
     applicable_rng() ? muts2bitarray(muts, ends; rng=rng) : muts2bitarray(muts, ends)
+
+"""
+    write_history_file(path, res::FisherWrightResult)
+    read_history_file(path) -> FisherWrightResult
+
+FisherWright's binary result format (`write_result`, `read_result`, from
+FisherWright 0.10): every haplotype, the selected alleles, the records and
+the pedigree. An `ArgumentError` with an earlier FisherWright.
+"""
+function write_history_file(path, res::FisherWrightResult)
+    isdefined(FisherWright, :write_result) ||
+        throw(ArgumentError("storing a history needs FisherWright 0.10 or later"))
+    return FisherWright.write_result(path, res)
+end
+function read_history_file(path)
+    isdefined(FisherWright, :read_result) ||
+        throw(ArgumentError("reading a stored history needs FisherWright 0.10 or later"))
+    return FisherWright.read_result(path)
+end
 
 # Whether `muts2bitarray` takes an `rng` (FisherWright 0.10 and later).
 applicable_rng() = pkgversion(FisherWright) >= v"0.10.0"

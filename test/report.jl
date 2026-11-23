@@ -9,7 +9,17 @@
     #   locus 5 (a < 0): 0 0 0 0 -> favourable fixed
     hap = Haplotype(BitMatrix([1 1 1 1; 1 1 1 1; 1 0 1 0; 0 0 0 0; 0 0 0 0]))
     q = TraitQTL("y", [1, 2, 3, 4, 5], [0.5, -1.0, 2.0, 0.0, -0.3])
-    @test BnGsim._qtl_status(hap, q) == (qtl_seg = 1, qtl_fixed = 2, qtl_lost = 1)
+    st = BnGsim._qtl_status(hap, q)
+    @test (st.qtl_seg, st.qtl_fixed, st.qtl_lost) == (1, 2, 1) && st.qtl_maf == 0.5 && isnan(st.qtl_alpha)
+    # architecture: α is the slope of log a² on log 2p(1 - p); the largest
+    # tenth (here 1 of 4) of the genic variance
+    p, a = [0.1, 0.2, 0.5, 0.0, 0.3], [2.0, -1.0, 0.5, 9.0, 1.0]       # the monomorphic locus is left out
+    ar = BnGsim._qtl_architecture(p, a)
+    h = 2 .* p[[1, 2, 3, 5]] .* (1 .- p[[1, 2, 3, 5]])
+    x, y = log.(h), log.(a[[1, 2, 3, 5]] .^ 2)
+    @test ar.qtl_alpha ≈ cov(x, y) / var(x) && ar.qtl_maf ≈ mean([0.1, 0.2, 0.5, 0.3])
+    v = h .* a[[1, 2, 3, 5]] .^ 2
+    @test ar.qtl_top10 ≈ maximum(v) / sum(v)
     # intensities: candidates' index, parents counted once per offspring
     index = [1.0, 2.0, 3.0, 4.0, 10.0, 20.0, 30.0]
     males, females = [1, 2, 3, 4], [5, 6, 7]

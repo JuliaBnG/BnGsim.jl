@@ -46,7 +46,7 @@ killed process can be resumed from there. Returns `(:completed, summary)`
 with the summaries of all replicates otherwise.
 
 State files: `run.jls` (scenario JSON, replicates, options, the sessions
-of the run), `history.jls` (the shared historical population, once saved),
+of the run), `history.jls` (the shared historical populations made so far),
 `done.jls` (the summaries of finished replicates) and `current.jls` (the
 replicate in progress: its population, map, loci and the rows so far).
 `on_replicate(r, rep)` is called when replicate `r` has finished, with its
@@ -57,17 +57,15 @@ function _execute(dir, s::Scenario, reps; checkpoint_every::Integer=0, should_st
     st = _state_dir(dir)
     p_hist, p_done, p_cur = joinpath(st, "history.jls"), joinpath(st, "done.jls"), joinpath(st, "current.jls")
     sp = _species_of(s)
-    hist = if !s.founders.shared_history
-        nothing
-    elseif isfile(p_hist)
-        _load_state(p_hist)
-    else
-        _history(s, sp, 0)
-    end
+    # shared histories by number, made when first needed
+    hists = isfile(p_hist) ? _load_state(p_hist) : Dict{Int,Any}()
+    hsaved = Ref(length(hists))
+    hist_of(r) = s.founders.shared_history ? get!(() -> _history_of(s, _history_index(s, r)), hists, _history_index(s, r)) :
+                 nothing
     done = isfile(p_done) ? _load_state(p_done) : Pair{Int,DataFrame}[]
     cur = isfile(p_cur) ? _load_state(p_cur) : nothing
     function save!(r, g, rep, rows)
-        hist === nothing || isfile(p_hist) || _save_state(p_hist, hist)
+        length(hists) == hsaved[] || (_save_state(p_hist, hists); hsaved[] = length(hists))
         _save_state(p_done, done)
         _save_state(p_cur, (replicate=r, step=g, population=rep.population, map=rep.map, qtl=rep.qtl,
             chip=rep.chip, rows=rows))
@@ -81,7 +79,7 @@ function _execute(dir, s::Scenario, reps; checkpoint_every::Integer=0, should_st
             g0, rows = cur.step, cur.rows
             cur = nothing
         else
-            rep = _setup_replicate(s, r, hist)
+            rep = _setup_replicate(s, r, hist_of(r))
             g0, rows = 0, Any[]
         end
         for g = g0+1:s.steps
@@ -94,7 +92,7 @@ function _execute(dir, s::Scenario, reps; checkpoint_every::Integer=0, should_st
         end
         on_replicate(r, rep)
         df = DataFrame([rows; _final_row(rep.population, rep.scheme, rep.meiosis)])
-        insertcols!(df, 1, :replicate => fill(r, nrow(df)))
+        insertcols!(df, 1, :replicate => fill(r, nrow(df)), :history => fill(_history_index(s, r), nrow(df)))
         push!(done, r => df)
         if checkpoint_every > 0 || isfile(p_cur)
             _save_state(p_done, done)

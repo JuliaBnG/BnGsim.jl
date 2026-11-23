@@ -50,6 +50,15 @@ replicate's first step (with selection, `genic_ratio` falls with allele
 frequencies changing at the QTL, and `var_ratio` below it with the
 negative disequilibrium of the Bulmer effect).
 
+With a column `history` (the historical population of each replicate)
+in which at least two histories have several replicates each, also
+`histories`, the number of histories at that step, and for every column
+`c` `c_sdh`, the standard deviation of the history means of `c`, and
+`c_seh` (`c_sdh / √K` over the `K` histories): with replicates nested in
+histories, `c_seh` is the standard error of the mean over histories,
+which includes the variation between histories that `c_se` leaves out
+(replicates of one history are not independent draws of the history).
+
 The rows are sorted by replicate before summing, so the result is the
 same, to the bit, whatever the order of the replicates in `summary`.
 """
@@ -57,9 +66,12 @@ function aggregate(df::DataFrame)
     "replicate" in names(df) && "generation" in names(df) ||
         throw(ArgumentError("the summary needs columns replicate and generation"))
     d = _with_changes(df)
-    metrics = [c for c in names(d) if !(c in ("replicate", "generation"))]
+    metrics = [c for c in names(d) if !(c in ("replicate", "generation", "history"))]
     gens = sort(unique(d.generation))
     out = DataFrame(generation=gens, replicates=[count(==(g), d.generation) for g in gens])
+    nested = "history" in names(d) && length(unique(d.history)) >= 2 &&
+             any(h -> length(unique(d.replicate[d.history .== h])) >= 2, unique(d.history))
+    nested && (out[!, :histories] = [length(unique(d.history[d.generation .== g])) for g in gens])
     for c in metrics
         μ, σ, se = Float64[], Float64[], Float64[]
         for g in gens
@@ -74,13 +86,32 @@ function aggregate(df::DataFrame)
         out[!, c*"_mean"] = μ
         out[!, c*"_sd"] = σ
         out[!, c*"_se"] = se
+        if nested
+            sdh, seh = Float64[], Float64[]
+            for g in gens
+                hs = sort(unique(d.history[d.generation .== g]))
+                hm = Float64[]
+                for h in hs
+                    x = [Float64(v) for (v, gg, hh) in zip(d[!, c], d.generation, d.history)
+                         if gg == g && hh == h && !isnan(Float64(v))]
+                    isempty(x) || push!(hm, sum(x) / length(x))
+                end
+                K = length(hm)
+                m = K == 0 ? NaN : sum(hm) / K
+                s = K < 2 ? NaN : sqrt(sum(abs2, hm .- m) / (K - 1))
+                push!(sdh, s)
+                push!(seh, K < 2 ? NaN : s / sqrt(K))
+            end
+            out[!, c*"_sdh"] = sdh
+            out[!, c*"_seh"] = seh
+        end
     end
     return out
 end
 
 # A summary written by `_write_csv`, read back: every value as a Float64
-# except `replicate` and `generation` (Julia's shortest round-trip form
-# makes this exact).
+# except `replicate`, `history` and `generation` (Julia's shortest
+# round-trip form makes this exact).
 function _read_summary(path)
     lines = readlines(path)
     hdr = split(lines[1], ',')
@@ -93,5 +124,6 @@ function _read_summary(path)
     df = DataFrame([h => c for (h, c) in zip(hdr, cols)])
     df.replicate = Int.(df.replicate)
     df.generation = Int.(df.generation)
+    "history" in names(df) && (df.history = Int.(df.history))
     return df
 end

@@ -40,6 +40,7 @@ include("founder-summary.jl")
 include("scenario.jl")
 include("estimate.jl")
 include("runner.jl")
+include("histories.jl")
 include("archive.jl")
 include("aggregate.jl")
 include("cli.jl")
@@ -65,7 +66,7 @@ export Scenario, ScenarioError, read_scenario, parse_scenario, validate_scenario
 export cli, ExitCode
 export resource_estimate, ScenarioSize
 export write_archive, infinitesimal
-export aggregate
+export aggregate, write_histories, check_histories
 
 include("precompile.jl")
 

@@ -56,7 +56,7 @@ Base.write(::ClosedPipe, ::UInt8) = throw(Base.IOError("write: broken pipe", Bas
     lines = readlines(joinpath(out, "summary.csv"))
     df = run_scenario(read_scenario(MINIMAL))
     @test split(lines[1], ',') == names(df) && length(lines) == nrow(df) + 1
-    @test parse.(Float64, split(lines[3], ',')[4:5]) == [df.mean[2], df.var[2]]   # values round-trip
+    @test parse.(Float64, split(lines[3], ',')[5:6]) == [df.mean[2], df.var[2]]   # values round-trip
     p = JSON.parse(read(joinpath(out, "provenance.json"), String))
     @test p["scenario_sha256"] == v["scenario_sha256"] && p["seed"] == 2026 && p["threads"] == Threads.nthreads()
     @test p["scenario"]["name"] == "minimal" && haskey(p, "started") && haskey(p, "host")

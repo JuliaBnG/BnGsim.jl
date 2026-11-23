@@ -335,9 +335,11 @@ run. The garbage collector alone moves the peak of one scenario by up to
    0.6 `FitnessLoci`/`TraitLoci`, `bottleneck` and `growth` *(done, 0.29.0:
    bottleneck, growth and sex ratio in the history; a quantitative trait
    under stabilizing or directional selection whose loci become the QTL,
-   `loci.qtl.from = "history"`)*. Next: histories stored once and reused
-   by several runs (`bngsim history`, `founders.history_file`), and
-   between-history variance in the aggregation.
+   `loci.qtl.from = "history"`)*; several histories per run, stored once
+   and reused (`bngsim history`, `founders.history_dir`), the
+   between-history standard error in the aggregation, QTL drawn from and
+   correlated with the historical trait (`nlc`, `rho`), and QTL
+   architecture diagnostics per cohort *(done, 0.30.0)*.
 
 **Gate:** realized `Var(TBV)` and the trait correlations recover their targets
 within pre-declared sampling tolerances. LD decays monotonically. The
