@@ -36,6 +36,7 @@ include("resume.jl")
 include("archive.jl")
 include("adapters.jl")
 include("aggregate.jl")
+include("report.jl")
 include("signals.jl")
 
 @testset "Aqua" begin

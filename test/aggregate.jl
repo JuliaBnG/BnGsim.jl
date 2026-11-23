@@ -21,6 +21,13 @@
         @test isequal(aggregate(df[p, :]), a)
     end
     @test_throws ArgumentError aggregate(DataFrame(x=[1]))
+    # variance depletion relative to each replicate's first step, and the
+    # rate of loss of heterozygosity, shuffled rows included
+    dv = DataFrame(replicate=[2, 1, 1, 2], generation=[1, 0, 1, 0], var=[1.0, 2.0, 1.0, 4.0],
+        genic=[3.0, 2.0, 1.5, 4.0], Fhet=[0.5, 0.0, 0.1, 0.2])
+    av = aggregate(dv)
+    @test av.var_ratio_mean == [1.0, (0.5 + 0.25) / 2] && av.genic_ratio_mean == [1.0, (0.75 + 0.75) / 2]
+    @test isnan(av.dFhet_mean[1]) && av.dFhet_mean[2] ≈ (0.1 + 0.3 / 0.8) / 2
     # several traits: dG for the index and for each trait
     t = parse_scenario(scenario_doc())
     s2 = run_scenario(t)

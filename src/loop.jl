@@ -781,8 +781,12 @@ summary of the current cohort (see [`generation_summary`](@ref)) with the
 accuracy of the evaluation in it (of the index, and with several traits
 of each trait as `accuracy_<name>`), the parents used, the generation
 interval `L` (mean age of the parents at the birth of their offspring,
-over both sexes) and the variances used by the evaluation, `va` and `ve`
-(one trait) or `va_<name>` and `ve_<name>`.
+over both sexes), the realized selection intensities `intensity_sire`
+and `intensity_dam` (the mean index of a sex's parents, weighted by their
+numbers of offspring, less the mean index of the eligible candidates of
+that sex, in standard deviations of the candidates' index) and the
+variances used by the evaluation, `va` and `ve` (one trait) or
+`va_<name>` and `ve_<name>`.
 """
 function step!(pop::Population, sc::Scheme, mm::MeiosisMap)
     g = current_step(pop)
@@ -790,9 +794,11 @@ function step!(pop::Population, sc::Scheme, mm::MeiosisMap)
     m = evaluate!(pop, sc)
     cand = generation_ids(pop, g)
     acc = _accuracies(pop, cand, w)
+    elig = _eligible(pop, sc, g)
     s, ns, d, nd, info = select_parents(pop, sc, m)
     plan = mating_plan(pop, s, ns, d, nd)
     L = mean(g + 1 .- pop.generation[plan])
+    ints = _intensities(pop.ebv * w, elig, plan)
     _cull_and_survive!(pop, sc, g, [s; d])
     # the parents' haplotypes, gathered from their cohorts; offspring
     # depend on the parents' alleles and the keys only, not on this order
@@ -825,7 +831,7 @@ function step!(pop::Population, sc::Scheme, mm::MeiosisMap)
     _phenotypes!(pop, ids, g + 1)
     segs = sc.record_meiosis ? founder_segments(pop, mm) : nothing
     out = merge(generation_summary(pop, g; weights = w, segs = segs), acc,
-        (nsire = length(s), ndam = length(d), L = L), _vc(pop), info)
+        (nsire = length(s), ndam = length(d), L = L), ints, _vc(pop), info)
     sc.retain == :active && _drop_genomes!(pop, sc)
     return out
 end
@@ -888,6 +894,17 @@ function _cull_and_survive!(pop::Population, sc::Scheme, g, parents)
     end
 end
 
+# The realized selection intensity of each sex: the mean index of the
+# parents, each counted once per offspring, less the mean index of the
+# eligible candidates of its sex, in standard deviations of the
+# candidates' index (n - 1 divisor). On the selection criterion (the EBV
+# index), so it is the standardized selection differential the scheme
+# achieved, after any contribution constraint (OCS) and death.
+function _intensities(index, (males, females), plan)
+    i(cand, par) = (mean(index[par]) - mean(index[cand])) / std(index[cand])
+    return (intensity_sire = i(males, plan[:, 1]), intensity_dam = i(females, plan[:, 2]))
+end
+
 function _accuracies(pop::Population, ids, w)
     k = ntraits(pop)
     acc = (accuracy = cor(pop.ebv[ids, :] * w, pop.tbv[ids, :] * w),)
@@ -920,6 +937,16 @@ function _aggregate_qtl(pop::Population, w)
     TraitQTL("H", loci, a; intercept = sum(w .* [q.intercept for q in pop.qtl]))
 end
 
+# The QTL of `q` with a non-zero effect, by the state of the favourable
+# allele (the allele coded 1 if its effect is positive) in `hap`:
+# segregating, fixed or lost. The three add up to the number of such QTL.
+function _qtl_status(hap::Haplotype, q::TraitQTL)
+    nz = findall(!iszero, q.additive)
+    p = vec(sum(dosage(hap, q.loci[nz]); dims = 2)) ./ hap.nhp
+    fav = [a > 0 ? x : 1 - x for (a, x) in zip(q.additive[nz], p)]
+    return (qtl_seg = count(x -> 0 < x < 1, fav), qtl_fixed = count(==(1), fav), qtl_lost = count(==(0), fav))
+end
+
 """
     generation_summary(pop::Population, g; weights = ones(k), segs = nothing) -> NamedTuple
 
@@ -927,7 +954,10 @@ For cohort `g`: its size; mean, variance and genic variance
 ``\\sum 2p(1-p)a^2`` at the QTL of the genetic values (one trait), or of
 the aggregate genotype ``H = w'g`` with `weights` as ``w`` (several
 traits, then also `mean_<name>`, `var_<name>` per trait and the genetic
-correlation `rg_<a>_<b>` of each pair within the cohort); mean pedigree
+correlation `rg_<a>_<b>` of each pair within the cohort); the QTL with a
+non-zero effect on that genetic value (on ``H``, the effects ``w'a``) at
+which the favourable allele is segregating (`qtl_seg`), fixed
+(`qtl_fixed`) or lost (`qtl_lost`) in the cohort; mean pedigree
 inbreeding `F` and mean pedigree `coancestry` ``\\bar\\theta_g`` over all
 pairs of the cohort, self-coancestry ``(1 + F_i)/2`` included (founders
 unrelated and non-inbred); the loss of heterozygosity `Fhet`; the
@@ -958,8 +988,10 @@ function generation_summary(pop::Population, g::Integer; weights = ones(ntraits(
     θ = mean(nrm(pop.sire, pop.dam, ids)) / 2             # mean coancestry, self included
     H(h) = (p = vec(sum(dosage(h, 1:h.nlc); dims = 2)) ./ h.nhp; mean(2 .* p .* (1 .- p)))
     k = ntraits(pop)
-    s = trait_summary(hap, k == 1 ? pop.qtl[1] : _aggregate_qtl(pop, weights))
-    out = (generation = Int(g), n = length(ids), mean = s.mean[1], var = s.var[1], genic = s.genic[1])
+    q = k == 1 ? pop.qtl[1] : _aggregate_qtl(pop, weights)
+    s = trait_summary(hap, q)
+    out = (generation = Int(g), n = length(ids), mean = s.mean[1], var = s.var[1], genic = s.genic[1],
+        _qtl_status(hap, q)...)
     if k > 1
         names = pop.traits
         V = pop.tbv[ids, :]
@@ -999,7 +1031,8 @@ end
 function _final_row(pop::Population, sc::Scheme, mm::MeiosisMap)
     segs = sc.record_meiosis ? founder_segments(pop, mm) : nothing
     return merge(generation_summary(pop, current_step(pop); weights = index_weights(pop, sc), segs = segs),
-        _no_accuracy(pop), (nsire = 0, ndam = 0, L = NaN), _vc(pop), _no_ocs(sc))
+        _no_accuracy(pop), (nsire = 0, ndam = 0, L = NaN), (intensity_sire = NaN, intensity_dam = NaN),
+        _vc(pop), _no_ocs(sc))
 end
 
 # ---- checkpoints -------------------------------------------------------

@@ -1,5 +1,29 @@
 # BnGsim.jl release notes
 
+## v0.21.0 (2026-11-23)
+
+### New
+
+- Report set (Phase 5). New per-cohort columns of the summary: `qtl_seg`,
+  `qtl_fixed` and `qtl_lost`, the QTL with a non-zero effect on the
+  genetic value (the index, with several traits) at which the favourable
+  allele is segregating, fixed or lost; `intensity_sire` and
+  `intensity_dam`, the realized selection intensity of each sex (the mean
+  index of its parents, each counted once per offspring, less the mean
+  index of the eligible candidates, in their standard deviations; `NaN`
+  in the last row). Under random selection the mean is 0 (0.013 ± 0.027
+  and −0.004 ± 0.008 over 200 steps of `examples/minimal.json`); under
+  its truncation of 5 of about 25 males, 1.36.
+- `aggregate` adds, derived within each replicate, `dFhet` (the rate of
+  loss of heterozygosity, as `dF`) and the depletion of the genetic
+  variance, `var_ratio` and `genic_ratio` (relative to the first step).
+
+### Changed
+
+- `summary.csv` and `aggregate.csv` have the new columns: readers that
+  index columns by position must be updated (not breaking for readers by
+  name).
+
 ## v0.20.0 (2026-11-22)
 
 ### New

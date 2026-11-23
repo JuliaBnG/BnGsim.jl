@@ -34,11 +34,16 @@ failure from both.
   empty (results are never overwritten):
   - `scenario.json`, the canonical scenario ([`scenario_json`](@ref));
   - `summary.csv`, the per-step summaries of every replicate
-    ([`run_scenario`](@ref)), numbers in Julia's shortest round-trip form;
+    ([`run_scenario`](@ref); columns in [`generation_summary`](@ref) and
+    [`step!`](@ref), among them the QTL at which the favourable allele is
+    segregating, fixed or lost and the realized selection intensity of
+    each sex), numbers in Julia's shortest round-trip form;
   - `aggregate.csv`, per time step over the replicates, the mean,
-    standard deviation and standard error of every summary, and of the
-    changes per step within each replicate (genetic gain `dG`, rate of
-    inbreeding `dF`) ([`aggregate`](@ref));
+    standard deviation and standard error of every summary, and of
+    quantities derived within each replicate: genetic gain `dG`, rates of
+    inbreeding `dF` (pedigree) and `dFhet` (loss of heterozygosity), and
+    the variance and genic variance relative to the first step,
+    `var_ratio` and `genic_ratio` ([`aggregate`](@ref));
   - `provenance.json`: the canonical scenario and its SHA-256, the seed and
     replicates, the BnGsim, CLI and schema versions, the Julia and package
     versions, the SHA-256 of the active manifest, the operating system,
