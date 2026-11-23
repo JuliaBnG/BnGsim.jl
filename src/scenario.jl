@@ -49,7 +49,12 @@ those without a default are required.
 `Goat`, `Pig`, `Horse`, `Dog`, `Cat`, `Chicken`, `Rabbit`), or
 `{"name", "chromosome"}` with autosome lengths in bp; and either `M`, bp per
 Morgan (`1e8`), or `morgan`, the genetic length of each chromosome. The
-canonical form lists `name`, `chromosome` and `morgan`.
+canonical form lists `name`, `chromosome` and `morgan`. Also
+`morgan_female` (`null`): the genetic lengths in the meioses of dams, with
+`morgan` then those of sires (the historical population, simulated by
+FisherWright with one map, uses their average); and `interference`
+(`1.0`): the shape ν of the gamma model of crossover interference (`1`:
+none, Haldane; see [`MeiosisMap`](@ref)), in the breeding steps.
 
 **`founders`**: the historical population, run with FisherWright from no
 variation: `ne` diploids for `nt` generations at `mr` mutations per 1e8 bp
@@ -138,7 +143,8 @@ struct Scenario
     seed::UInt64
     replicates::Int
     steps::Int
-    species::@NamedTuple{name::String, chromosome::Vector{Int}, morgan::Vector{Float64}}
+    species::@NamedTuple{name::String, chromosome::Vector{Int}, morgan::Vector{Float64},
+        morgan_female::Vector{Float64}, interference::Float64}
     founders::@NamedTuple{ne::Int, nt::Int, mr::Float64, decline::Vector{Int}, nid::Int, shared_history::Bool,
         herds::Int, popsize::Union{Nothing,NamedTuple}, sexratio::Float64, selection::Union{Nothing,NamedTuple},
         histories::Int, history_dir::String}
@@ -416,13 +422,13 @@ function _species(c, d)
     d === nothing && return nothing
     path = "species"
     if haskey(d, "preset")
-        _known!(c, d, path, ["preset", "M", "morgan"])
+        _known!(c, d, path, ["preset", "M", "morgan", "morgan_female", "interference"])
         preset = _get(c, d, path, "preset", :string; choices=sort!(collect(keys(_PRESETS))))
         preset === nothing && return nothing
         base = _PRESETS[preset]()
         name, chr = base.name, Int.(base.chromosome)
     else
-        _known!(c, d, path, ["name", "chromosome", "M", "morgan"])
+        _known!(c, d, path, ["name", "chromosome", "M", "morgan", "morgan_female", "interference"])
         name = _get(c, d, path, "name", :string)
         chr = _get(c, d, path, "chromosome", :ints;
             check=v -> isempty(v) ? "must not be empty" : all(>(0), v) ? nothing : "lengths must be positive")
@@ -443,7 +449,14 @@ function _species(c, d)
         M === nothing && return nothing
         chr ./ M
     end
-    return (name=name, chromosome=chr, morgan=morgan)
+    fem = _get(c, d, path, "morgan_female", :floats; default=Float64[], nullable=true, null_as=Float64[],
+        check=v -> all(>(0), v) ? nothing : "genetic lengths must be positive")
+    fem === nothing && return nothing
+    isempty(fem) || length(fem) == length(chr) ||
+        (_err!(c, "$path.morgan_female", "needs one length per chromosome ($(length(chr)))"); return nothing)
+    ν = _get(c, d, path, "interference", :float; default=1.0, check=_positive)
+    ν === nothing && return nothing
+    return (name=name, chromosome=chr, morgan=morgan, morgan_female=fem, interference=ν)
 end
 
 function _founders(c, d)
@@ -713,7 +726,9 @@ The canonical JSON object of `s`: every key, with defaults filled.
 """
 function scenario_dict(s::Scenario)
     O = JSON.Object{String,Any}
-    sp = O("name" => s.species.name, "chromosome" => s.species.chromosome, "morgan" => s.species.morgan)
+    sp = O("name" => s.species.name, "chromosome" => s.species.chromosome, "morgan" => s.species.morgan,
+        "morgan_female" => isempty(s.species.morgan_female) ? nothing : s.species.morgan_female,
+        "interference" => s.species.interference)
     f = s.founders
     da(d) = d.family === :normal ? O("family" => "normal", "mean" => d.a, "sd" => d.b) :
             d.family === :gamma ? O("family" => "gamma", "shape" => d.a, "scale" => d.b, "sign" => String(d.sign)) :
@@ -772,7 +787,17 @@ write_scenario(path::AbstractString, s::Scenario) = write(path, scenario_json(s)
 
 # ---- running ---------------------------------------------------------------
 
-_species_of(s::Scenario) = GenericSpecies(s.species.name, s.species.chromosome; morgan=s.species.morgan)
+# The species as BnGStructs sees it (and FisherWright simulates the
+# history with): with sex-specific maps, their average.
+_species_of(s::Scenario) = GenericSpecies(s.species.name, s.species.chromosome; morgan=_mean_map(s))
+_mean_map(s::Scenario) = isempty(s.species.morgan_female) ? s.species.morgan :
+                         (s.species.morgan .+ s.species.morgan_female) ./ 2
+
+# The meiosis map of the breeding steps: sires on `morgan`, dams on
+# `morgan_female` (or `morgan`), with the scenario's interference.
+_meiosis_map(s::Scenario, sp, vm) = MeiosisMap(sp, vm; male=s.species.morgan,
+    female=isempty(s.species.morgan_female) ? s.species.morgan : s.species.morgan_female,
+    interference=s.species.interference)
 
 # Stages of the founder domain.
 const _STAGE_HISTORY, _STAGE_DECLINE, _STAGE_SAMPLE, _STAGE_NUCLEOTIDES = 0x0001, 0x0002, 0x0003, 0x0004
@@ -835,7 +860,7 @@ function _history(s::Scenario, sp::Species, k::Integer)
         traj..., kw...)
     isempty(f.decline) && return res
     n_last = length(res.active_haplotypes) ÷ 2
-    return fisher_wright(n_last, length(f.decline), s.species.chromosome, f.mr; morgan=s.species.morgan,
+    return fisher_wright(n_last, length(f.decline), s.species.chromosome, f.mr; morgan=_mean_map(s),
         init=res, popsize=f.decline, result=true, rng=keyed_rng(SimKey(key; stage=_STAGE_DECLINE)), kw...)
 end
 
@@ -944,7 +969,7 @@ function _setup_replicate(s::Scenario, r::Integer, history)
     end
     chip = s.chip === nothing ? Int32[] : Int32.(panels[2].loci)
     sc = Scheme(; s.scheme..., chip=chip)
-    return (; population=pop, scheme=sc, meiosis=MeiosisMap(sp, vm), species=sp, map=vm,
+    return (; population=pop, scheme=sc, meiosis=_meiosis_map(s, sp, vm), species=sp, map=vm,
         qtl=fromhist ? panels[1].rows : Int32.(panels[1].loci), chip)
 end
 

@@ -45,6 +45,7 @@ include("mt-repeated.jl")
 include("masks.jl")
 include("history.jl")
 include("histories.jl")
+include("meiosis-models.jl")
 include("signals.jl")
 
 @testset "Aqua" begin

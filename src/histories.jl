@@ -14,7 +14,9 @@ function _history_params(s::Scenario)
     d = scenario_dict(s)
     f = d["founders"]
     O = JSON.Object{String,Any}
-    return O("species" => d["species"], "founders" => O(k => f[k] for k in
+    # the species as the history sees it: one (sex-averaged) map, no interference
+    sp = O("name" => s.species.name, "chromosome" => s.species.chromosome, "morgan" => _mean_map(s))
+    return O("species" => sp, "founders" => O(k => f[k] for k in
         ("ne", "nt", "mr", "decline", "popsize", "sexratio", "selection")))
 end
 
