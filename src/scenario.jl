@@ -78,7 +78,8 @@ correlation matrices of `k` traits, as arrays of rows.
 `ndam`, `evaluation`, `selection`, `K`, `lambda`, `kappa`, `ub`, `blend`,
 `max_sire_age`, `max_dam_age`, `reml`, `weights`, `survival`,
 `cull_unselected`, `genotyped_cohorts`, `ocs`, `delta_F`, `record_meiosis`,
-`window`, `ancestor_generations`, `retain`, with the same defaults;
+`window`, `ancestor_generations`, `retain`, `report_reliability`, with
+the same defaults;
 `null` for `K` and `delta_F` (unset) and for `ancestor_generations` (all).
 The chip loci come from `loci.chip`.
 
@@ -267,6 +268,7 @@ const _SCHEME_FIELDS = [
     ("window", :window, :int, 0, (;)),
     ("ancestor_generations", :ancestor_generations, :int, typemax(Int), (nullable=true, null_as=typemax(Int))),
     ("retain", :retain, :symbol, :all, (choices=[:all, :active],)),
+    ("report_reliability", :report_reliability, :bool, false, (;)),
 ]
 
 const _TOP_KEYS = ["schema", "schema_version", "name", "seed", "replicates", "steps", "species", "founders", "loci",
