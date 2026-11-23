@@ -23,3 +23,33 @@
     @test all(>(0), sm.intensity_sire[1:end-1]) && isnan(sm.intensity_sire[end])
 end
 
+
+@testset "Report: reliability and genomic F" begin
+    for (doc, ev) in ((JSON.parse(read(MINIMAL, String)), "pblup"), (scenario_doc(), "gblup"))
+        doc["scheme"]["evaluation"] = ev
+        doc["scheme"]["report_reliability"] = true
+        s = parse_scenario(doc)
+        rep = run_replicate(s)
+        pop, sm = rep.population, rep.summary
+        # the PEV blocks, solved 64 candidates at a time, against the dense
+        # inverse of the coefficient matrix (one trait and two)
+        sc = Scheme(; s.scheme..., chip = rep.chip)
+        m = evaluate!(pop, sc)
+        n, k = length(evaluation_view(pop, sc)), ntraits(pop)
+        @test n > 64
+        P = BnGsim._pev_blocks(m, collect(1:n), n, k)
+        C = inv(Matrix(m.lhs)) .* m.scale
+        a = first(m.blocks[2]) - 1
+        @test all(i -> (r = [a + (j - 1) * n + i for j = 1:k]; P[:, :, i] ≈ C[r, r]), 1:n)
+        @test all(x -> 0 < x < 1, sm.reliability[1:end-1]) && isnan(sm.reliability[end])
+        k > 1 && @test all(x -> 0 < x < 1, sm.reliability_a[1:end-1])
+        # Fgrm: VanRaden's G of the last cohort with the founders' frequencies
+        h0 = pop.blocks[1]
+        p0 = vec(sum(dosage(h0, 1:h0.nlc); dims = 2)) ./ h0.nhp
+        seg = findall(x -> 0 < x < 1, p0)
+        G = BnGsim.grm(pop.blocks[end]; p = p0, loci = seg)
+        @test sm.Fgrm[end] ≈ mean(diag(G)) - 1
+    end
+    # off by default: NaN
+    @test all(isnan, run_scenario(read_scenario(MINIMAL)).reliability)
+end

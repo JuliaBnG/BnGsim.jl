@@ -280,7 +280,7 @@ end
            K = NaN, λ = 0.0, κ = 0.0, ub = 1.0, chip = Int32[], blend = 0.05,
            max_sire_age = 0, max_dam_age = 0, reml = false, weights = Float64[],
            survival = Float64[], cull_unselected = false, genotyped_cohorts = 0,
-           ocs = :fixed, ΔF = NaN, record_meiosis = false)
+           ocs = :fixed, ΔF = NaN, record_meiosis = false, report_reliability = false)
 
 A selection and mating scheme, applied every time step:
 
@@ -346,6 +346,13 @@ A selection and mating scheme, applied every time step:
 - `record_meiosis`: keep the crossover records of every cohort in
   `pop.meioses`, for realized IBD from founder segments
   ([`founder_segments`](@ref)); about 8 bytes per crossover;
+- `report_reliability`: report the mean reliability of the candidates of
+  each step from the prediction error variances of the evaluation
+  (`:pblup`, `:gblup`, `:ssgblup`; see [`step!`](@ref)). It costs a
+  solve of the mixed-model equations per candidate and trait, so it is
+  off by default (the column is then `NaN`), and the resource estimate
+  does not include it (on 5500 animals and 10 steps of PBLUP it took
+  0.3 s more than the 0.4 s of the run);
 - `survival`: `survival[a + 1]` is the probability that an animal alive
   at age `a` survives to age `a + 1` (the last entry for all older ages;
   empty: no deaths). Deaths are drawn between steps (`Domain.SURVIVAL`),
@@ -410,9 +417,10 @@ Base.@kwdef struct Scheme
     window::Int = 0
     ancestor_generations::Int = typemax(Int)
     retain::Symbol = :all
+    report_reliability::Bool = false
     function Scheme(noff, nsire, ndam, evaluation, selection, K, λ, κ, ub, chip, blend,
         max_sire_age, max_dam_age, reml, weights, survival, cull_unselected, genotyped_cohorts, ocs, ΔF,
-        record_meiosis, window, ancestor_generations, retain)
+        record_meiosis, window, ancestor_generations, retain, report_reliability)
         noff > 1 && nsire > 0 && ndam > 0 || throw(ArgumentError("noff > 1, nsire > 0 and ndam > 0 are required"))
         max_sire_age >= 0 && max_dam_age >= 0 || throw(ArgumentError("maximum ages must be non-negative"))
         reml && !(evaluation in (:pblup, :gblup, :ssgblup)) &&
@@ -445,7 +453,8 @@ Base.@kwdef struct Scheme
             "it must exceed the maximum ages"))
         new(noff, nsire, ndam, evaluation, selection, K, λ, κ, ub, Int32.(chip), blend,
             max_sire_age, max_dam_age, reml, Float64.(weights), Float64.(survival), cull_unselected,
-            genotyped_cohorts, ocs, ΔF, record_meiosis, window, ancestor_generations, retain)
+            genotyped_cohorts, ocs, ΔF, record_meiosis, window, ancestor_generations, retain,
+            report_reliability)
     end
 end
 
@@ -784,7 +793,12 @@ interval `L` (mean age of the parents at the birth of their offspring,
 over both sexes), the realized selection intensities `intensity_sire`
 and `intensity_dam` (the mean index of a sex's parents, weighted by their
 numbers of offspring, less the mean index of the eligible candidates of
-that sex, in standard deviations of the candidates' index) and the
+that sex, in standard deviations of the candidates' index), the mean
+reliability ``R^2 = 1 - \\mathrm{PEV}/\\sigma^2_a`` of the candidates'
+index (`reliability`, and `reliability_<name>` per trait with several
+traits; ``\\sigma^2_a`` of the index ``w'G_0w`` from the base variances
+the evaluation used, `NaN` unless the scheme sets `report_reliability`
+and the evaluation solves mixed-model equations) and the
 variances used by the evaluation, `va` and `ve` (one trait) or
 `va_<name>` and `ve_<name>`.
 """
@@ -793,7 +807,7 @@ function step!(pop::Population, sc::Scheme, mm::MeiosisMap)
     w = index_weights(pop, sc)
     m = evaluate!(pop, sc)
     cand = generation_ids(pop, g)
-    acc = _accuracies(pop, cand, w)
+    acc = merge(_accuracies(pop, cand, w), _reliabilities(pop, sc, m, cand, w))
     elig = _eligible(pop, sc, g)
     s, ns, d, nd, info = select_parents(pop, sc, m)
     plan = mating_plan(pop, s, ns, d, nd)
@@ -913,6 +927,53 @@ function _accuracies(pop::Population, ids, w)
     merge(acc, NamedTuple{names}(Tuple(cor(pop.ebv[ids, j], pop.tbv[ids, j]) for j = 1:k)))
 end
 
+# Per candidate (rows `rows` of an evaluation of `n` animals and `k`
+# traits), the k × k prediction error covariance of its breeding values,
+# from the MME `m`: the diagonal blocks of the inverse of the coefficient
+# matrix, solved for 64 candidates at a time so the work array has at most
+# 64k columns whatever the size of the cohort.
+function _pev_blocks(m::MME, rows, n, k)
+    a = first(m.blocks[2]) - 1
+    L = m.lhs
+    F = cholesky(Symmetric(L); check = false)
+    fac = issuccess(F) ? F : lu(L)
+    out = Array{Float64}(undef, k, k, length(rows))
+    for chunk in Iterators.partition(eachindex(rows), 64)
+        idx = [a + (j - 1) * n + rows[c] for c in chunk for j = 1:k]
+        E = zeros(size(L, 1), length(idx))
+        for (col, r) in enumerate(idx)
+            E[r, col] = 1
+        end
+        S = fac \ E
+        for (t, c) in enumerate(chunk)
+            cols = (t-1)*k+1:t*k
+            out[:, :, c] = S[idx[cols], cols] .* m.scale
+        end
+    end
+    return out
+end
+
+# The mean reliability R² = 1 - PEV/σ²_a of the candidates `ids`: of the
+# index w'u (σ² = w'G₀w) and, with several traits, of each trait
+# (`reliability_<name>`). σ²_a is the base genetic variance the evaluation
+# used (`va`), so R² is on the scale of the founders. NaN without an MME
+# (`:tbv`, `:phenotype`) or unless the scheme asks for it.
+function _reliabilities(pop::Population, sc::Scheme, m, ids, w)
+    (sc.report_reliability && m !== nothing) || return _no_reliability(pop)
+    k = ntraits(pop)
+    v = evaluation_view(pop, sc)
+    P = _pev_blocks(m, id_to_row(v, ids), length(v), k)
+    G = pop.G0
+    σ² = dot(w, G * w)
+    r = (reliability = mean(1 - dot(w, view(P, :, :, i) * w) / σ² for i in axes(P, 3)),)
+    k == 1 && return r
+    names = Tuple(Symbol("reliability_", t.name) for t in pop.traits)
+    merge(r, NamedTuple{names}(Tuple(mean(1 - P[j, j, i] / G[j, j] for i in axes(P, 3)) for j = 1:k)))
+end
+
+_no_reliability(pop::Population) = (k = ntraits(pop); k == 1 ? (reliability = NaN,) :
+    merge((reliability = NaN,), NamedTuple{Tuple(Symbol("reliability_", t.name) for t in pop.traits)}(Tuple(fill(NaN, k)))))
+
 _no_accuracy(pop::Population) = (k = ntraits(pop); k == 1 ? (accuracy = NaN,) :
     merge((accuracy = NaN,), NamedTuple{Tuple(Symbol("accuracy_", t.name) for t in pop.traits)}(Tuple(fill(NaN, k)))))
 
@@ -968,6 +1029,19 @@ passes when the scheme records meioses), the mean realized inbreeding
 two haplotypes descend from the same founder haplotype (its expectation
 is the pedigree `F`).
 
+`Fgrm` is the mean genomic inbreeding of the cohort, ``G_{ii} - 1`` of
+VanRaden's (2008) first ``G = ZZ'/2\\sum p_0(1-p_0)`` with the founders'
+allele frequencies ``p_0`` as base, over all loci segregating in the
+founders: ``Z_{ij} = M_{ij} - 2p_{0j}`` for the dosage ``M_{ij}``. As
+``p_0`` is estimated from the founders, two distinct founder alleles have
+mean coancestry ``-1/(2n_0 - 1)`` on this base, so without selection the
+expectation of `Fgrm` is about ``F - (1 - F)/(2n_0 - 1)``, ``F`` the
+pedigree inbreeding (checked over 200 replicates of
+`examples/minimal.json` with random selection, steps 2–6); in cohort 0 it
+is the founders' own deviation from Hardy–Weinberg proportions. `Fgrm`
+measures the realized homozygosity of each animal, `Fhet` the loss of
+heterozygosity of the cohort.
+
 `Fhet` is ``1 - (1 - \\bar\\theta_0)\\,\\bar H_g/\\bar H_0`` over all loci, with
 ``\\bar H`` the mean of ``2p(1-p)`` from the cohort's own allele
 frequencies and ``\\bar\\theta_0 = 1/(2n_0)`` the founders' mean
@@ -987,6 +1061,11 @@ function generation_summary(pop::Population, g::Integer; weights = ones(ntraits(
     F = nrm_diag(pop.sire, pop.dam)[ids] .- 1
     θ = mean(nrm(pop.sire, pop.dam, ids)) / 2             # mean coancestry, self included
     H(h) = (p = vec(sum(dosage(h, 1:h.nlc); dims = 2)) ./ h.nhp; mean(2 .* p .* (1 .- p)))
+    h0 = pop.blocks[1]
+    p0 = vec(sum(dosage(h0, 1:h0.nlc); dims = 2)) ./ h0.nhp
+    seg = findall(x -> 0 < x < 1, p0)
+    Z = dosage(hap, seg) .- 2 .* p0[seg]
+    Fgrm = mean(sum(abs2, Z; dims = 1)) / (2 * sum(p -> p * (1 - p), p0[seg])) - 1
     k = ntraits(pop)
     q = k == 1 ? pop.qtl[1] : _aggregate_qtl(pop, weights)
     s = trait_summary(hap, q)
@@ -1003,7 +1082,7 @@ function generation_summary(pop::Population, g::Integer; weights = ones(ntraits(
             Tuple(C[j, l] for (j, l) in pairs))
         out = merge(out, per, rg)
     end
-    merge(out, (F = mean(F), coancestry = θ, Fhet = 1 - (1 - θ0(pop)) * H(hap) / H(pop.blocks[1]),
+    merge(out, (F = mean(F), coancestry = θ, Fhet = 1 - (1 - θ0(pop)) * H(hap) / H(pop.blocks[1]), Fgrm = Fgrm,
         alive = count(i -> pop.generation[i] <= g < pop.exit[i], 1:length(pop))),
         segs === nothing ? NamedTuple() : (Fseg = mean(segment_inbreeding(segs; ids = ids)),))
 end
@@ -1031,7 +1110,8 @@ end
 function _final_row(pop::Population, sc::Scheme, mm::MeiosisMap)
     segs = sc.record_meiosis ? founder_segments(pop, mm) : nothing
     return merge(generation_summary(pop, current_step(pop); weights = index_weights(pop, sc), segs = segs),
-        _no_accuracy(pop), (nsire = 0, ndam = 0, L = NaN), (intensity_sire = NaN, intensity_dam = NaN),
+        _no_accuracy(pop), _no_reliability(pop), (nsire = 0, ndam = 0, L = NaN),
+        (intensity_sire = NaN, intensity_dam = NaN),
         _vc(pop), _no_ocs(sc))
 end
 

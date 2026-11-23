@@ -36,8 +36,10 @@ failure from both.
   - `summary.csv`, the per-step summaries of every replicate
     ([`run_scenario`](@ref); columns in [`generation_summary`](@ref) and
     [`step!`](@ref), among them the QTL at which the favourable allele is
-    segregating, fixed or lost and the realized selection intensity of
-    each sex), numbers in Julia's shortest round-trip form;
+    segregating, fixed or lost, the realized selection intensity of each
+    sex, genomic inbreeding `Fgrm` and, with `report_reliability`, the
+    candidates' mean reliability), numbers in Julia's shortest round-trip
+    form;
   - `aggregate.csv`, per time step over the replicates, the mean,
     standard deviation and standard error of every summary, and of
     quantities derived within each replicate: genetic gain `dG`, rates of

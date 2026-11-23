@@ -1,5 +1,33 @@
 # BnGsim.jl release notes
 
+## v0.22.0 (2026-11-23)
+
+### New
+
+- `Fgrm` in the summary: the mean genomic inbreeding of the cohort,
+  ``G_ii - 1`` of VanRaden's first G with the founders' allele
+  frequencies as base, over the loci segregating in the founders. As
+  those frequencies are estimated from the founders, its expectation
+  without selection is about ``F - (1 - F)/(2n_0 - 1)``: over 200
+  replicates of `examples/minimal.json` with random selection
+  (n₀ = 50, predicted offset −0.010), steps 2–4 gave −0.0106, −0.0102
+  and −0.0103 (SE 0.003–0.004).
+- `Scheme(; report_reliability = true)` (scenario key
+  `report_reliability`): `reliability`, the mean ``1 - PEV/σ²_a`` of the
+  candidates of each step for the index (σ² = w'G₀w) and, with several
+  traits, `reliability_<name>` per trait, from the prediction error
+  covariances of the PBLUP, GBLUP or ssGBLUP equations. Solved for 64
+  candidates at a time, so memory stays bounded; checked against a dense
+  inverse of the coefficient matrix. Off by default (`NaN`): it costs a
+  solve per candidate and trait, and the resource estimate does not
+  include it.
+
+### Changed
+
+- `summary.csv` and `aggregate.csv` have the new columns (`Fgrm`,
+  `reliability`): readers by position must be updated; not breaking for
+  readers by name.
+
 ## v0.21.0 (2026-11-23)
 
 ### New
