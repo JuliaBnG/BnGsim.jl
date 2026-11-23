@@ -1,0 +1,8 @@
+{"schema": "bngsim-scenario", "schema_version": 1, "name": "l_records", "seed": 1, "steps": 10,
+ "species": {"name": "toy", "chromosome": [50000000, 50000000]},
+ "founders": {"ne": 1000, "nt": 1000, "nid": 1000, "herds": 20},
+ "loci": {"qtl": {"nlc": 200, "maf": 0.01}},
+ "traits": [{"name": "ch4", "h2": 0.25, "records": 6, "repeatability": 0.6, "c2": 0.1},
+            {"name": "growth", "h2": 0.3, "records": 4, "repeatability": 0.4},
+            {"name": "carcass", "h2": 0.4, "age": 1}],
+ "scheme": {"noff": 3000, "nsire": 50, "ndam": 1500, "evaluation": "pblup", "max_sire_age": 5, "max_dam_age": 5}}

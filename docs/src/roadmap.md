@@ -60,7 +60,7 @@ a dependency, and BnGsim does not aim for API compatibility with them.
 Sequence-level forward simulation belongs in FisherWright (or SLiM), not
 here.
 
-## 2. Current status (v0.4.0)
+## 2. Current status (v0.33.0)
 
 | Area | State |
 | :--- | :--- |
@@ -363,7 +363,16 @@ neutral SFS matches its expectation.
    `mating`, `pair_limit`; minimum-cost pairings solved exactly by
    `transport`)*. Fixed progeny per dam is the equal allocation of
    truncation selection. Joint mate selection (contributions and pairs
-   optimised together) *(not planned yet)*.
+   optimised together) *(prototyped and not adopted, 2026-11-23)*: a
+   search maximising the parents' index minus μ times the coancestry of
+   the matings, under the contribution-kinship bound of `:ocs`, gave over
+   40 replicates no more gain than OCS followed by minimum-coancestry
+   mating and slightly higher inbreeding (8 steps, K = 0.09: G 1.354 ±
+   0.058 and 1.339 ± 0.049 for μ = 1 and 10 against 1.370 ± 0.053; F
+   0.0464 and 0.0447 against 0.0438). The two-stage plan already maximises
+   gain under the bound and then minimises the coancestry of the matings.
+   Worth revisiting only for constraints on the pairs themselves or a
+   bound on the offspring's inbreeding.
 4. Strict validation that parents are appended before offspring.
 
 **Gate:** crossover counts match the map length in Morgans. Parent–offspring
@@ -493,3 +502,68 @@ in Phase 4.
 | Scope inflation | Medium | Phase 0 vertical slice first; §9 re-entry triggers. |
 | Web dependencies leaking into the core | Medium | CLI subprocess boundary; Phase 6 gate. |
 | Disk exhaustion on the worker | Medium | Tiered artifacts, retention classes, quotas, GC. |
+
+## 11. Toward 1.0 (review of 2026-11-23, 0.33.0)
+
+Phases 0–5 and the listed items of Phase 3 are done; Phase 6 (the web
+service) is a separate repository. What a 1.0 would promise, and what
+stands in the way:
+
+**The contract for other programs** (the service, BnGBench): the scenario
+schema, the command line (interface 1, exit codes), the output files and
+the reproducibility invariants (I1–I3). These are stable in substance:
+every key added since 0.13 is optional with a default that keeps earlier
+scenarios' results, and keyed draws make results independent of threads
+and of resume history. Three things are not yet stable:
+
+1. **The canonical form grows.** Each release that adds a key changes the
+   canonical JSON, and so the scenario SHA-256 in the provenance, of
+   every scenario, although results do not change. A schema version
+   still reads `1`.
+2. **The summary columns change.** Columns were added in 0.21, 0.22 and
+   0.30 (and their set depends on the traits and the selection method);
+   readers by position broke each time. There is no version of the
+   output files.
+3. **The time estimate** is calibrated on single-trait scenarios; for
+   multi-trait scenarios with repeated records it is about five times
+   too low (the memory estimate holds; see "Resource estimate").
+
+**The Julia API** has three layers:
+
+- the breeding loop and its pieces (`Population`, `Scheme`, `step!`,
+  `simulate!`, `evaluate!`, `select_parents`, `mating_plan`,
+  `founder_population`, `MeiosisMap`, `make_progeny!`, the keys, the
+  scenario functions, `aggregate`, `write_archive`, `write_histories`,
+  `resource_estimate`): documented and tested, but `Population` is a
+  mutable struct whose fields (about 35, one or more added in most
+  releases) users read directly;
+- the reports and relationship helpers (`generation_summary`,
+  `founder_segments`, `irm`, `pedigree_view`, …): stable;
+- the building blocks of 0.1–0.3 (`sum_map`, `crossovers`, `gamete!`,
+  `gene_drop!`, `random_mate`, `rnd_ped`, `expand`, `sample_id`,
+  `norm_mv!`, `tbv!`, `phenotype!`, `dummy_traits`, `FounderPopulation`,
+  `sample_founder_population`, `HistoricalSpec`, `historical_population`,
+  `continue_population`, `read_packed_haplotypes`, `write_xy`,
+  `vanraden_g`, the text `provenance`): they draw from an explicit or the
+  global generator, outside the keyed streams (invariant I1), and
+  `vanraden_g` duplicates RelationshipMatrices' `grm`. Three camelCase
+  aliases (`sumMap`, `sampleID`, `sampleLoci`) and `gene_drop(pg, …)` are
+  deprecated since 0.2.
+
+**Decisions before 1.0** (for the maintainer):
+
+- a. The building blocks: remove them, keep them in a `BnGsim.Legacy`
+  module outside the 1.0 promise, or keep them as they are. Recommended:
+  `Legacy`, and remove the deprecated aliases.
+- b. The schema: keep version 1 with the rule "keys may be added, with
+  defaults that keep results; the canonical form, and its hash, may gain
+  them in minor releases", or freeze the key set as version 2 at 1.0.
+  Recommended: the rule, with a separate hash of the scenario's
+  *results-relevant* content, so that adding a key with its default does
+  not change it.
+- c. `Population`: document its fields as API, or give accessors and
+  declare the fields internal. Recommended: accessors for what users read
+  (records, EBVs, true values, phenotypes, pedigree, genomes), fields
+  internal.
+- d. Output files: a version in the provenance (`outputs_version`) and a
+  documented column table, columns only appended after 1.0.

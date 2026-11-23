@@ -1,0 +1,6 @@
+{"schema": "bngsim-scenario", "schema_version": 1, "name": "l_growth", "seed": 1, "steps": 2,
+ "species": {"name": "toy", "chromosome": [100000000, 100000000]},
+ "founders": {"ne": 1000, "nt": 2000, "nid": 500, "popsize": {"growth": {"rate": 0.002, "limit": 6000}}},
+ "loci": {"qtl": {"nlc": 200, "maf": 0.01}},
+ "traits": [{"name": "y", "h2": 0.3}],
+ "scheme": {"noff": 200, "nsire": 20, "ndam": 100, "evaluation": "pblup"}}

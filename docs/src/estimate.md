@@ -70,3 +70,39 @@ peaked 6 % to 28 % lower than on the calibration host at 8 (GBLUP with
 6,000 genotyped animals: 2,536 MB against about 3,500 MB), so there the
 estimate errs high, on the safe side. The scripts to measure and refit are in
 `validation/estimate/` (`run.sh`, `measure.jl`, `fit.jl`).
+
+## Later terms (0.33)
+
+Features added after the calibration contribute terms computed from their
+data structures, checked against measured runs rather than fitted to many
+(scenarios and runs in `validation/estimate/later/`):
+
+- several shared histories (`founders.histories`): the history being
+  simulated as before, and each further one held as a result at 2.4 bytes
+  per byte of its haplotypes (fitted to the one scenario with four);
+- a census trajectory (`founders.popsize`): the history term uses the
+  largest census, since FisherWright sizes its buffers by it, and `N` in
+  the allele and locus counts the harmonic mean of the census; the run
+  time sums the work of every generation at its census;
+- repeated records: 40 bytes per record;
+- `report_reliability`: its work array, 64 columns per trait of the
+  mixed-model equations, and one solve per candidate in the run time.
+
+Measured on svr (8 threads, Julia 1.13.1, two runs each):
+
+| scenario | measured (MiB) | expected (MiB) | bound (MiB) |
+| :--- | :--- | ---: | ---: |
+| four shared histories | 1339, 1453 | 1399 | 1818 |
+| history growing to 6000 | 1663, 1534 | 1661 | 2159 |
+| three traits, repeated records | 1550, 1586 | 1367 | 1777 |
+| reliability, 3000 candidates | 1333, 1310 | 1217 | 1582 |
+
+These runs first exceeded their bounds by up to 38 %: the genomic
+inbreeding of the summaries (`Fgrm`, 0.22) formed a dense floating-point
+matrix of loci × animals of the cohort every step (570 MiB for 25 000 loci
+and 3000 animals). 0.33 computes it from per-locus sums of the dosages;
+the peaks above are after that change.
+
+The run time of multi-trait scenarios with repeated records is not
+modelled: the examples `dairy.json` and `sheep.json` ran about five times
+longer than their estimate.

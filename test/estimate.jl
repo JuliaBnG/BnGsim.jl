@@ -39,6 +39,23 @@
         @test maximum(m) <= est.peak_rss_bound_bytes
     end
 
+    # The terms added after the calibration (0.33): the same gate on their
+    # scenarios (several histories, a growing history, repeated records,
+    # reliability)
+    later = joinpath(cal, "later")
+    lr = Dict{String,Vector{Float64}}()
+    for l in eachline(joinpath(later, "measured.tsv"))
+        occursin(".json", l) || continue
+        f = split(l, '\t')
+        push!(get!(lr, f[1], Float64[]), parse(Float64, f[2]) * 2^20)
+    end
+    @test length(lr) == 4
+    for (f, m) in lr
+        est = resource_estimate(read_scenario(joinpath(later, f)))
+        @test abs(mean(m) / est.peak_rss_bytes - 1) <= 0.25
+        @test maximum(m) <= est.peak_rss_bound_bytes
+    end
+
     # Command line
     code, v, _ = run_cli("estimate", MINIMAL)
     @test code == 0 && v["status"] == "estimated" && v["peak_rss_bytes"] == e.peak_rss_bytes

@@ -1,5 +1,44 @@
 # BnGsim.jl release notes
 
+## v0.33.0 (2026-11-23)
+
+Hardening release.
+
+### Fixed
+
+- Memory: the genomic inbreeding of the summaries (`Fgrm`, since 0.22)
+  formed a dense floating-point matrix of loci × animals of the cohort
+  every step (570 MiB for 25 000 loci and 3000 animals), so that runs
+  exceeded the memory bound of `resource_estimate` by up to 38 %. It is
+  now computed from per-locus sums of the dosages; its values change only
+  in the last digits (rounding). Peaks of the scenarios measured dropped
+  by 700–800 MiB.
+- An evaluation before any record exists (traits recorded later in life)
+  stopped with an error; without data every breeding value's BLUP is 0,
+  the base mean, which is now what it returns.
+
+### New
+
+- `resource_estimate` covers the features added since 0.15: several
+  shared histories, census trajectories in the history (memory and run
+  time), repeated records and `report_reliability`; checked on svr
+  against measured peaks (documentation page "Resource estimate", "Later
+  terms"; the test suite checks every mean within 25 % and every run
+  below the bound). The run time of multi-trait scenarios with repeated
+  records is not modelled (about five times longer than estimated).
+- The precompile workload also runs two traits with repeated records,
+  contemporary groups, OCS and minimum-coancestry mating, and GBLUP: a
+  cold `bngsim run` of such scenarios takes about 3 s instead of 8–10 s.
+- Example scenarios: `examples/dairy.json`, `sheep.json` and
+  `history-qtl.json`, with `examples/README.md`; the tests check that
+  every example validates.
+- The package roadmap gains §11, "Toward 1.0": what a 1.0 would promise,
+  what stands in the way (the canonical form and the summary columns
+  grow; the building blocks of 0.1–0.3 sit outside the keyed streams;
+  `Population`'s fields are read directly), and four decisions for the
+  maintainer. It also records the joint mate selection prototype, not
+  adopted.
+
 ## v0.32.0 (2026-11-23)
 
 ### New

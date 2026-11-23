@@ -851,7 +851,13 @@ function evaluate!(pop::Population, sc::Scheme)
     obs = observed(pop)[v.ids, :]
     # records of the window's animals only, not of the ancestors traced
     sc.window > 0 && (obs[[t - pop.generation[i] >= sc.window for i in v.ids], :] .= false)
-    any(obs) || throw(ArgumentError("no records are available at time step $t"))
+    if !any(obs) && !(_record_mode(pop) && any(r -> pop.records.step[r] <= t, eachindex(pop.records.step)))
+        # no records yet (traits recorded later in life): without data the
+        # BLUP of every breeding value is 0, the base mean
+        pop.ebv .= NaN
+        pop.ebv[v.ids, :] .= 0
+        return nothing
+    end
     P = pop.phenotype[v.ids, :]
     n = length(v)
     Kinv = _kinv(pop, sc, v)
@@ -1504,6 +1510,27 @@ function _qtl_architecture(p, a)
     return (qtl_maf = mean(min.(ps, 1 .- ps)), qtl_alpha = α, qtl_top10 = top)
 end
 
+# Mean G_ii - 1 of VanRaden's G with base frequencies p0 at loci `seg`, for
+# the individuals of `hap`, from per-locus sums of the Int8 dosages d:
+# Σ_i (d - 2p)² = Σd² - 4pΣd + 4np², with d² = d + 2[d = 2]. No dense
+# floating-point matrix of loci × individuals is formed.
+function _fgrm(hap::Haplotype, seg, p0)
+    D = dosage(hap, seg)                                   # Int8, loci × individuals
+    m, n = size(D)
+    s1, hom = zeros(Int, m), zeros(Int, m)
+    @inbounds for j = 1:n, k = 1:m                          # in memory order
+        d = D[k, j]
+        s1[k] += d
+        hom[k] += d == 2
+    end
+    tot = 0.0
+    for k = 1:m
+        c = 2 * p0[k]
+        tot += (s1[k] + 2hom[k]) - 2c * s1[k] + n * c^2
+    end
+    return tot / n / (2 * sum(p -> p * (1 - p), p0)) - 1
+end
+
 """
     generation_summary(pop::Population, g; weights = ones(k), segs = nothing) -> NamedTuple
 
@@ -1565,8 +1592,7 @@ function generation_summary(pop::Population, g::Integer; weights = ones(ntraits(
     h0 = pop.blocks[1]
     p0 = vec(sum(dosage(h0, 1:h0.nlc); dims = 2)) ./ h0.nhp
     seg = findall(x -> 0 < x < 1, p0)
-    Z = dosage(hap, seg) .- 2 .* p0[seg]
-    Fgrm = mean(sum(abs2, Z; dims = 1)) / (2 * sum(p -> p * (1 - p), p0[seg])) - 1
+    Fgrm = _fgrm(hap, seg, p0[seg])
     k = ntraits(pop)
     q = k == 1 ? pop.qtl[1] : _aggregate_qtl(pop, weights)
     s = trait_summary(hap, q)

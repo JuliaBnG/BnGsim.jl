@@ -23,7 +23,18 @@ before it runs:
   (all evaluated) and `:ssgblup` (the last `genotyped_cohorts` cohorts, or
   all); 0 otherwise;
 - `cohort`: the largest cohort (the per-step summary forms its dense
-  relationship matrix).
+  relationship matrix);
+- `histories`: the historical populations held in memory at once (`K` of
+  `founders.histories` when shared; 1 otherwise), and `census`, the
+  largest census of the history (FisherWright sizes its buffers by it);
+- `records`: the repeated records made over the run (record mode: about
+  one per animal, trait and step of its recorded life);
+- `equations`: the mixed-model equations of the evaluations (animal and,
+  with repeated records, permanent-environment effects).
+
+With a census trajectory (`founders.popsize`), `N` in `alleles` and
+`loci` is the harmonic mean of the census over the historical
+generations.
 """
 struct ScenarioSize
     alleles::Float64
@@ -32,13 +43,19 @@ struct ScenarioSize
     evaluated::Int
     genotyped::Int
     cohort::Int
+    histories::Int
+    census::Int
+    records::Float64
+    equations::Int
 end
 
 function ScenarioSize(s::Scenario)
     f, sc = s.founders, s.scheme
     μL = f.mr * 1e-8 * sum(s.species.chromosome)
     t = f.nt + length(f.decline)
-    N = f.ne
+    sizes = [f.popsize === nothing ? fill(f.ne, f.nt) : _trajectory(f.popsize, f.ne).(1:f.nt); f.decline]
+    N = isempty(sizes) ? f.ne : round(Int, length(sizes) / sum(1 ./ sizes))       # harmonic mean
+    census = maximum([f.ne; sizes])
     alleles = μL * min(t, 4N)
     loci = 4N * μL * log1p(2f.nid * t / 4N)
     animals = f.nid + s.steps * sc.noff
@@ -51,7 +68,15 @@ function ScenarioSize(s::Scenario)
     else
         0
     end
-    return ScenarioSize(alleles, loci, animals, evaluated, genotyped, max(f.nid, sc.noff))
+    k = length(s.traits)
+    life = max(sc.max_sire_age, sc.max_dam_age) + 1
+    recmode = any(t -> t.records > 1, s.traits)
+    records = recmode ? animals * sum(min(t.records, life, s.steps) for t in s.traits) : 0.0
+    pe = any(t -> t.records > 1 && t.repeatability > t.h2, s.traits)
+    equations = evaluated * k * (pe ? 2 : 1)
+    histories = f.shared_history ? f.histories : 1
+    return ScenarioSize(alleles, loci, animals, evaluated, genotyped, max(f.nid, sc.noff), histories, census,
+        records, equations)
 end
 
 # Coefficients of the memory model, fitted by relative least squares (non-
@@ -76,17 +101,32 @@ const _MEM_BOUND_FACTOR = 1.3
 # meiosis in the historical run; per evaluated animal and step; per cube of
 # the genotyped set and step; and a fixed cost of the dense evaluations
 # (mostly compilation, as they are not in the precompile workload).
-const _TIME = (history = 7.63e-10, pedigree = 1.139e-5, dense = 8.446e-12, dense_fixed = 4.48)
+const _TIME = (history = 7.63e-10, pedigree = 1.139e-5, dense = 8.446e-12, dense_fixed = 4.48,
+    reliability = 1.2e-8)   # per candidate × equation and step (report_reliability; 0.22, PBLUP)
+# Terms added after the calibration, from the data structures rather than a
+# fit (docs/src/estimate.md, "Later terms"): bytes per repeated record
+# (four vectors of 4, 4, 4 and 8 bytes, with up to twice that from their
+# growth) and per element of the work array of `report_reliability`.
+const _MEM_RECORD = 40.0
+# Bytes per byte of each further history held in memory (the results only,
+# without FisherWright's working buffers that `_MEM.history` includes);
+# fitted to one scenario with four histories (validation/estimate/later).
+const _MEM_HISTORY_STORED = 2.4
+const _MEM_RELIABILITY = 8.0 * 64
 
 # The memory terms of a scenario, in bytes.
 function _memory_terms(s::Scenario, z::ScenarioSize)
     ev = s.scheme.evaluation
     dense = 8.0 * z.genotyped^2
+    k = length(s.traits)
     return (
         baseline = _MEM.baseline,
-        history = _MEM.history * 8.0 * s.founders.ne * z.alleles,
+        history = 8.0 * z.census * z.alleles * (_MEM.history + _MEM_HISTORY_STORED * (z.histories - 1)),
         genomes = _MEM.genomes * z.animals * 2 * z.loci / 8,
         dense = (ev === :gblup ? _MEM.dense_gblup : ev === :ssgblup ? _MEM.dense_ssgblup : 0.0) * dense,
+        records = _MEM_RECORD * z.records,
+        reliability = s.scheme.report_reliability && ev in (:pblup, :gblup, :ssgblup) ?
+            _MEM_RELIABILITY * k * z.equations : 0.0,
     )
 end
 
@@ -97,9 +137,10 @@ The resources scenario `s` needs, from the scenario alone:
 
 - `peak_rss_bytes`: the expected peak resident memory of a run of one
   replicate at a time, the sum of `memory_terms`: the process itself, the
-  historical population, the packed genomes of all animals (and with them
-  the pedigree and records), and the dense relationship matrices of
-  `:gblup` and `:ssgblup`;
+  historical populations held at once, the packed genomes of all animals
+  (and with them the pedigree and single records), the dense relationship
+  matrices of `:gblup` and `:ssgblup`, the repeated records, and the work
+  array of `report_reliability`;
 - `peak_rss_bound_bytes`: a conservative bound for admission: the
   expectation times a factor that no calibration or held-out run
   exceeded, with a margin;
@@ -121,10 +162,14 @@ function resource_estimate(s::Scenario)
     f = s.founders
     t = f.nt + length(f.decline)
     μL = f.mr * 1e-8 * sum(s.species.chromosome)
-    # alleles carried through meiosis over the historical run
-    carried = 2f.ne * μL * sum(min(g, 4f.ne) for g = 1:t)
-    nh = f.shared_history ? 1 : s.replicates
-    loop = s.replicates * s.steps * (_TIME.pedigree * z.evaluated + _TIME.dense * float(z.genotyped)^3) +
+    # alleles carried through meiosis over the historical run, generation by
+    # generation with the census trajectory
+    sizes = [f.popsize === nothing ? fill(f.ne, f.nt) : _trajectory(f.popsize, f.ne).(1:f.nt); f.decline]
+    carried = sum(2 * sizes[g] * μL * min(g, 4z.census) for g in eachindex(sizes); init=0.0)
+    nh = f.shared_history ? min(f.histories, s.replicates) : s.replicates
+    isempty(f.history_dir) || (nh = 0)                     # read, not simulated
+    rel = s.scheme.report_reliability ? _TIME.reliability * s.scheme.noff * length(s.traits) * z.equations : 0.0
+    loop = s.replicates * s.steps * (_TIME.pedigree * z.evaluated + _TIME.dense * float(z.genotyped)^3 + rel) +
            (s.scheme.evaluation in (:gblup, :ssgblup) ? _TIME.dense_fixed : 0.0)
     seconds = nh * _TIME.history * carried + loop
     rows = s.replicates * (s.steps + 1)

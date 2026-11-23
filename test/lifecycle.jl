@@ -94,7 +94,8 @@ using RelationshipMatrices: ainv
     ta = Trait("y"; h² = 0.3, σₐ = 1.0, μ = 10.0, age = 1)
     pa = founder_population(hap, qtl, ta, key)
     @test isempty(recorded(pa))
-    @test_throws ArgumentError evaluate!(pa, sc)            # nothing to evaluate at step 0
+    # nothing recorded at step 0: without data every EBV is 0, the base mean
+    @test evaluate!(pa, sc) === nothing && all(iszero, pa.ebv)
     step!(pa, Scheme(; noff = 200, nsire = 10, ndam = 50, evaluation = :tbv), mm)
     @test recorded(pa) == collect(generation_ids(pa, 0))
     r = step!(pa, sc, mm)                                    # cohort 1 is evaluated on its parents

@@ -7,7 +7,7 @@ f = ARGS[1]
 s = read_scenario(f)
 sp = BnGsim._species_of(s)
 t = @elapsed begin
-    h = BnGsim._history(s, sp, 0)
+    h = BnGsim._history(s, sp, 1)
     r = run_replicate(s, 1; history=h)
 end
 mbar = mean(length, h.active_haplotypes)
