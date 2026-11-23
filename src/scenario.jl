@@ -132,7 +132,9 @@ other entries are not used).
 `max_sire_age`, `max_dam_age`, `reml`, `weights`, `survival`,
 `cull_unselected`, `genotyped_cohorts`, `ocs`, `delta_F`, `record_meiosis`,
 `window`, `ancestor_generations`, `retain`, `report_reliability`,
-`mating`, `pair_limit`, with the same defaults;
+`mating`, `pair_limit`, `min_sire_age`, `min_dam_age`,
+`max_sire_offspring`, `max_dam_offspring`, `max_parity`, with the same
+defaults;
 `null` for `K` and `delta_F` (unset) and for `ancestor_generations` (all).
 The chip loci come from `loci.chip`.
 
@@ -329,6 +331,11 @@ const _SCHEME_FIELDS = [
     ("report_reliability", :report_reliability, :bool, false, (;)),
     ("mating", :mating, :symbol, :random, (choices=[:random, :min_coancestry, :assortative, :disassortative],)),
     ("pair_limit", :pair_limit, :int, 0, (;)),
+    ("min_sire_age", :min_sire_age, :int, 0, (;)),
+    ("min_dam_age", :min_dam_age, :int, 0, (;)),
+    ("max_sire_offspring", :max_sire_offspring, :int, 0, (;)),
+    ("max_dam_offspring", :max_dam_offspring, :int, 0, (;)),
+    ("max_parity", :max_parity, :int, 0, (;)),
 ]
 
 const _TOP_KEYS = ["schema", "schema_version", "name", "seed", "replicates", "steps", "species", "founders", "loci",

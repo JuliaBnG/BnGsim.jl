@@ -353,7 +353,11 @@ neutral SFS matches its expectation.
    `species.interference`; crossover counts and r(d) checked against the
    gamma model)*.
 2. Demography: age classes, parity, survival, reproductive limits, culling,
-   and discrete or overlapping generations.
+   and discrete or overlapping generations. *(done: overlapping generations,
+   maximum ages (0.5.0), survival and culling (0.7.0); 0.32.0: minimum breeding
+   ages, offspring per parent and step (litter size, natural service),
+   parity limits of dams)*.
+
 3. Mating: random, assortative/disassortative, minimum-coancestry and a
    limit per sire–dam pair (factorial-type with limit 1) *(done, 0.25.0:
    `mating`, `pair_limit`; minimum-cost pairings solved exactly by

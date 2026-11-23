@@ -113,6 +113,7 @@ mutable struct Population
     pmiss::Vector{Float64}
     hmiss::Vector{Float64}
     nobs::Matrix{Int32}
+    parity::Vector{Int32}
 end
 
 Base.length(pop::Population) = length(pop.sire)
@@ -260,7 +261,7 @@ function _founders(hap, qs, traits, key, Re, herds, c2, records, repeatability, 
     pop = Population(zeros(Int32, n), zeros(Int32, n), falses(n), zeros(Int32, n), fill(typemax(Int32), n), G,
         fill(NaN, size(G)), fill(NaN, size(G)), Union{Nothing,Haplotype}[hap], [1], Int32.(1:n), qs, traits, Lr, key, G0, R0,
         Union{Nothing,MeiosisRecord}[], ones(Int32, n), sqrt.(c2v .* Vp),
-        nrec, σpe, zeros(n, k), Lpe * Lpe', RepeatedRecords(), Lpe, pmiss, hmiss, zeros(Int32, n, k))
+        nrec, σpe, zeros(n, k), Lpe * Lpe', RepeatedRecords(), Lpe, pmiss, hmiss, zeros(Int32, n, k), zeros(Int32, n))
     if herds > 1
         for i = 1:n
             pop.herd[i] = keyed_int(keyed_rng(SimKey(key; generation = 0, domain = Domain.MATING,
@@ -509,7 +510,8 @@ end
            max_sire_age = 0, max_dam_age = 0, reml = false, weights = Float64[],
            survival = Float64[], cull_unselected = false, genotyped_cohorts = 0,
            ocs = :fixed, ΔF = NaN, record_meiosis = false, report_reliability = false,
-           mating = :random, pair_limit = 0)
+           mating = :random, pair_limit = 0, min_sire_age = 0, min_dam_age = 0,
+           max_sire_offspring = 0, max_dam_offspring = 0, max_parity = 0)
 
 A selection and mating scheme, applied every time step:
 
@@ -576,6 +578,17 @@ A selection and mating scheme, applied every time step:
   offspring) are paired, see [`mating_plan`](@ref): `:random`,
   `:min_coancestry` (the pairing of least total coancestry),
   `:assortative` or `:disassortative` (by the index);
+- `min_sire_age`, `min_dam_age`: the youngest age at which an animal can
+  be a parent (time steps; `0`: from birth), at most the maximum ages;
+  the founders, the adult base population, are parents from step 0;
+- `max_sire_offspring`, `max_dam_offspring`: at most this many offspring
+  per parent and time step (`0`: no limit), e.g. a litter size, or
+  natural service against AI. Offspring numbers are capped and the
+  rest spread over the other parents in proportion to their
+  contributions; an `ArgumentError` when the selected parents cannot
+  have `noff` offspring under the limits;
+- `max_parity`: at most this many time steps with offspring per dam
+  (`0`: no limit; `pop.parity` counts them);
 - `pair_limit`: at most this many offspring per sire–dam pair (`0`: no
   limit; `1`: no full sibs, a factorial-type design), with `:random` or
   `:min_coancestry`;
@@ -656,9 +669,19 @@ Base.@kwdef struct Scheme
     report_reliability::Bool = false
     mating::Symbol = :random
     pair_limit::Int = 0
+    min_sire_age::Int = 0
+    min_dam_age::Int = 0
+    max_sire_offspring::Int = 0
+    max_dam_offspring::Int = 0
+    max_parity::Int = 0
     function Scheme(noff, nsire, ndam, evaluation, selection, K, λ, κ, ub, chip, blend,
         max_sire_age, max_dam_age, reml, weights, survival, cull_unselected, genotyped_cohorts, ocs, ΔF,
-        record_meiosis, window, ancestor_generations, retain, report_reliability, mating, pair_limit)
+        record_meiosis, window, ancestor_generations, retain, report_reliability, mating, pair_limit,
+        min_sire_age, min_dam_age, max_sire_offspring, max_dam_offspring, max_parity)
+        0 <= min_sire_age <= max_sire_age && 0 <= min_dam_age <= max_dam_age ||
+            throw(ArgumentError("minimum ages must lie in 0:maximum age"))
+        max_sire_offspring >= 0 && max_dam_offspring >= 0 && max_parity >= 0 ||
+            throw(ArgumentError("offspring and parity limits must be non-negative"))
         mating in (:random, :min_coancestry, :assortative, :disassortative) ||
             throw(ArgumentError("mating must be :random, :min_coancestry, :assortative or :disassortative"))
         pair_limit >= 0 || throw(ArgumentError("pair_limit must be non-negative"))
@@ -697,7 +720,8 @@ Base.@kwdef struct Scheme
         new(noff, nsire, ndam, evaluation, selection, K, λ, κ, ub, Int32.(chip), blend,
             max_sire_age, max_dam_age, reml, Float64.(weights), Float64.(survival), cull_unselected,
             genotyped_cohorts, ocs, ΔF, record_meiosis, window, ancestor_generations, retain,
-            report_reliability, mating, pair_limit)
+            report_reliability, mating, pair_limit, min_sire_age, min_dam_age, max_sire_offspring,
+            max_dam_offspring, max_parity)
     end
 end
 
@@ -993,11 +1017,43 @@ end
 
 # Integer numbers of offspring for parents with contributions `w` (summing
 # to 1 within the group): largest remainder, ties by ascending id.
-function _allocate(ids, w, n)
+function _allocate(ids, w, n; cap::Integer = 0)
+    cap > 0 && return _allocate_capped(ids, w, n, cap)
     raw = w ./ sum(w) .* n
     k = floor.(Int, raw)
     rest = n - sum(k)
     order = sortperm(collect(zip(-(raw .- k), ids)))
+    for t in order[1:rest]
+        k[t] += 1
+    end
+    return k
+end
+
+# The allocation above with at most `cap` per parent: shares in proportion
+# to `w`, those above `cap` set to `cap` and the rest spread over the others
+# in proportion to their `w` (repeated until none exceeds it), then rounded
+# by largest remainder without passing `cap`, ties by ascending id.
+function _allocate_capped(ids, w, n, cap)
+    length(ids) * cap >= n || throw(ArgumentError("$(length(ids)) parents with at most $cap offspring each " *
+        "cannot have $n offspring; select more parents or raise the limit"))
+    raw = zeros(length(ids))
+    free = trues(length(ids))
+    rem = Float64(n)
+    while true
+        tot = sum(w[free])
+        tot > 0 || throw(ArgumentError("the parents with a contribution cannot have $n offspring under " *
+            "the limit of $cap each"))
+        raw[free] = w[free] ./ tot .* rem
+        over = free .& (raw .> cap)
+        any(over) || break
+        raw[over] .= cap
+        free .&= .!over
+        rem = n - sum(raw[.!free])
+    end
+    k = floor.(Int, raw)
+    rest = n - sum(k)
+    order = filter(t -> k[t] < cap, sortperm(collect(zip(-(raw .- k), ids))))
+    length(order) >= rest || throw(ArgumentError("cannot allocate $n offspring under the limit of $cap each"))
     for t in order[1:rest]
         k[t] += 1
     end
@@ -1029,11 +1085,15 @@ function _pev_index(m::MME, cand, w, n)
     return (Ω .+ Ω') ./ 2
 end
 
-# living males and females young enough to be parents at step g
+# living males and females of an age to be parents at step g (between the
+# minimum and maximum ages; the founders, the adult base population, from
+# step 0), dams below the maximum parity
 function _eligible(pop::Population, sc::Scheme, g)
     young(a) = pop.first[max(0, g - a)+1]:length(pop)
-    males = filter(i -> pop.male[i] && pop.exit[i] > g, young(sc.max_sire_age))
-    females = filter(i -> !pop.male[i] && pop.exit[i] > g, young(sc.max_dam_age))
+    old(i, a) = pop.generation[i] == 0 || g - pop.generation[i] >= a
+    males = filter(i -> pop.male[i] && pop.exit[i] > g && old(i, sc.min_sire_age), young(sc.max_sire_age))
+    females = filter(i -> !pop.male[i] && pop.exit[i] > g && old(i, sc.min_dam_age) &&
+        (sc.max_parity == 0 || pop.parity[i] < sc.max_parity), young(sc.max_dam_age))
     return males, females
 end
 
@@ -1064,7 +1124,7 @@ function select_parents(pop::Population, sc::Scheme, m)
     males, females = _eligible(pop, sc, g)
     (isempty(males) || isempty(females)) && throw(ArgumentError(
         "no living $(isempty(males) ? "males" : "females") are eligible at step $g; " *
-        "raise the maximum ages or the survival"))
+        "raise the maximum ages or the survival, or lower the minimum ages or the parity limit"))
     cand = sort!([males; females])
     if sc.selection in (:truncation, :random)
         crit = sc.selection == :truncation ? index : _random_criterion(pop, g, cand)
@@ -1072,7 +1132,8 @@ function select_parents(pop::Population, sc::Scheme, m)
         d = _best(females, crit[females], sc.ndam)
         s = sort(s)
         d = sort(d)
-        return s, _allocate(s, ones(length(s)), sc.noff), d, _allocate(d, ones(length(d)), sc.noff), NamedTuple()
+        return s, _allocate(s, ones(length(s)), sc.noff; cap = sc.max_sire_offspring), d,
+            _allocate(d, ones(length(d)), sc.noff; cap = sc.max_dam_offspring), NamedTuple()
     end
     A = nrm(pop.sire, pop.dam, cand)
     u = index[cand]
@@ -1098,7 +1159,8 @@ function select_parents(pop::Population, sc::Scheme, m)
     ms = findall(k -> pop.male[cand[k]] && c[k] > 1e-9, eachindex(cand))
     fs = findall(k -> !pop.male[cand[k]] && c[k] > 1e-9, eachindex(cand))
     s, d = cand[ms], cand[fs]
-    ns, nd = _allocate(s, c[ms], sc.noff), _allocate(d, c[fs], sc.noff)
+    ns = _allocate(s, c[ms], sc.noff; cap = sc.max_sire_offspring)
+    nd = _allocate(d, c[fs], sc.noff; cap = sc.max_dam_offspring)
     keep_s, keep_d = ns .> 0, nd .> 0
     return s[keep_s], ns[keep_s], d[keep_d], nd[keep_d], info
 end
@@ -1245,6 +1307,10 @@ function step!(pop::Population, sc::Scheme, mm::MeiosisMap)
     pop.ebv = vcat(pop.ebv, fill(NaN, sc.noff, k))
     pop.pe = vcat(pop.pe, zeros(sc.noff, k))
     pop.nobs = vcat(pop.nobs, zeros(Int32, sc.noff, k))
+    append!(pop.parity, zeros(Int32, sc.noff))
+    for i in unique(plan[:, 2])                          # dams with offspring this step
+        pop.parity[i] += 1
+    end
     append!(pop.exit, fill(typemax(Int32), sc.noff))
     push!(pop.blocks, off)
     push!(pop.first, n0 + 1)
