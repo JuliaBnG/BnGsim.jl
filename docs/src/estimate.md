@@ -103,6 +103,14 @@ matrix of loci × animals of the cohort every step (570 MiB for 25 000 loci
 and 3000 animals). 0.33 computes it from per-locus sums of the dosages;
 the peaks above are after that change.
 
-The run time of multi-trait scenarios with repeated records is not
-modelled: the examples `dairy.json` and `sheep.json` ran about five times
-longer than their estimate.
+The run time of large genomes and of multi-trait scenarios with repeated
+records is not modelled: the calibration scenarios had small genomes, and
+the model has no term for sampling the founders from the history, for the
+per-step work over all loci (meiosis and the summaries), or for
+multi-trait equations. Until 0.35 the examples `dairy.json` and
+`sheep.json` ran about five times longer than their estimate; 0.36
+removed two costs that grew with the genome (G of GBLUP and ssGBLUP built
+from the chip loci only, the allele counts of the summaries taken from
+the packed haplotypes), and at 12 threads on a 12-core desktop they ran
+in 53 s and 55 s, against estimates of 24.8 s and 17.4 s (2.1 and 3.2
+times). A recalibration with these terms is planned.

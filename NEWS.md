@@ -1,5 +1,34 @@
 # BnGsim.jl release notes
 
+## v0.36.0 (2026-11-24)
+
+Performance of the breeding loop with large genomes.
+
+### Changed
+
+- GBLUP and ssGBLUP build the genomic relationship matrix from the chip
+  loci only. `grm(H; loci = chip)` takes time in proportion to every
+  locus of `H`, and the founders carry many more segregating loci than
+  the chip (275,000 against 2,000 in `examples/sheep.json`). EBVs change
+  at rounding level (largest difference 1.8e-13 in `sheep.json`): one
+  sum inside `grm` is taken in a different order. Selection and the
+  summaries were unchanged in the runs checked; a near-tie between
+  candidates could in principle resolve differently.
+- The per-step summary (`Fhet`, `Fgrm`) counts alleles and homozygotes
+  per locus from the packed haplotypes instead of forming dense dosage
+  matrices of all loci, four per step, two of them of the founders. The
+  counts are exact integers: results are identical.
+- In `examples/dairy.json` the loop per replicate (history excluded)
+  took 13.3 s instead of 21.8 s at 8 threads, single-threaded 19.6 s
+  instead of 47.4 s; `sheep.json` 11.0 s instead of 13.1 s. At 12
+  threads the examples ran in 53 s (dairy) and 55 s (sheep), about two
+  to three times their estimate, against five before. The time model is
+  not yet recalibrated ("Resource estimate").
+
+No breaking changes to the Julia API or the scenario schema. Results
+of GBLUP and ssGBLUP evaluations differ from 0.35 at rounding level;
+all other results are unchanged.
+
 ## v0.35.0 (2026-11-23)
 
 The contract of the results toward 1.0 (package roadmap §11, decisions b
