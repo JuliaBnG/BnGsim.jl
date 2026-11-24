@@ -864,6 +864,22 @@ function _haplotypes(pop::Population, ids)
     return out
 end
 
+# The haplotypes of `ids` at `loci` only (e.g. the chip): `grm` takes time
+# in proportion to every locus of the haplotypes it is given, whichever it
+# uses, and the founders carry many more segregating loci than the chip.
+function _haplotypes(pop::Population, ids, loci::AbstractVector{<:Integer})
+    B = BitMatrix(undef, length(loci), 2length(ids))
+    for (k, i) in enumerate(ids)
+        j = Int(pop.slot[i])
+        j > 0 || throw(ArgumentError("the genome of animal $i was dropped (retain = :active)"))
+        src = pop.blocks[pop.generation[i]+1].gt
+        for h = 0:1
+            B[:, 2k-1+h] = view(src, loci, 2j - 1 + h)
+        end
+    end
+    return Haplotype(B)
+end
+
 """
     genotyped(pop::Population, scheme::Scheme, t = current_step(pop)) -> Vector{Int}
 
@@ -897,11 +913,10 @@ end
 function _kinv(pop::Population, sc::Scheme, v::PedigreeView)
     sc.evaluation == :pblup && return ainv(v.sire, v.dam)
     ids = intersect(genotyped(pop, sc), v.ids)            # both ascending
-    H = _haplotypes(pop, ids)
+    H = _haplotypes(pop, ids, sc.chip)                    # the chip loci only
     base = pop.blocks[1]                                  # the founders
-    p = zeros(base.nlc)                                   # grm wants one per locus
-    p[sc.chip] = vec(sum(dosage(base, sc.chip); dims = 2)) ./ base.nhp
-    G = grm(H; p = p, loci = sc.chip)
+    p = vec(sum(dosage(base, sc.chip); dims = 2)) ./ base.nhp
+    G = grm(H; p = p)
     sc.evaluation == :ssgblup && return hinv(v.sire, v.dam, G, id_to_row(v, ids); delta = sc.blend)
     sc.blend > 0 && (G = (1 - sc.blend) .* G .+ sc.blend .* nrm(v.sire, v.dam))
     inv(cholesky(Symmetric(G)))
@@ -1602,19 +1617,47 @@ function _qtl_architecture(p, a)
     return (qtl_maf = mean(min.(ps, 1 .- ps)), qtl_alpha = α, qtl_top10 = top)
 end
 
-# Mean G_ii - 1 of VanRaden's G with base frequencies p0 at loci `seg`, for
-# the individuals of `hap`, from per-locus sums of the Int8 dosages d:
-# Σ_i (d - 2p)² = Σd² - 4pΣd + 4np², with d² = d + 2[d = 2]. No dense
-# floating-point matrix of loci × individuals is formed.
-function _fgrm(hap::Haplotype, seg, p0)
-    D = dosage(hap, seg)                                   # Int8, loci × individuals
-    m, n = size(D)
-    s1, hom = zeros(Int, m), zeros(Int, m)
-    @inbounds for j = 1:n, k = 1:m                          # in memory order
-        d = D[k, j]
-        s1[k] += d
-        hom[k] += d == 2
+# Per-locus counts over the haplotypes of `h`, from the packed words (the
+# padding bits are zero), in time proportional to the set bits: the copies
+# of allele 1 (`hom = false`), or the individuals with two copies (`true`).
+# Exact integers, so the result does not depend on the threads.
+function _locus_counts(h::Haplotype, hom::Bool = false)
+    ch = h.gt.chunks
+    nw = size(h.gt, 1) ÷ 64
+    ncol = hom ? h.nhp ÷ 2 : h.nhp
+    nb = clamp(Threads.nthreads(), 1, ncol)
+    parts = [zeros(Int, 64nw) for _ = 1:nb]
+    Threads.@threads for b = 1:nb
+        c = parts[b]
+        @inbounds for j = b:nb:ncol
+            o1 = hom ? (2j - 2) * nw : (j - 1) * nw
+            for k = 1:nw
+                w = hom ? ch[o1+k] & ch[o1+nw+k] : ch[o1+k]
+                base = 64(k - 1) + 1
+                while w != 0
+                    c[base+trailing_zeros(w)] += 1
+                    w &= w - 1
+                end
+            end
+        end
     end
+    tot = parts[1]
+    for b = 2:nb
+        tot .+= parts[b]
+    end
+    return resize!(tot, h.nlc)
+end
+
+_frequencies(h::Haplotype) = _locus_counts(h) ./ h.nhp
+
+# Mean G_ii - 1 of VanRaden's G with base frequencies p0 at loci `seg`, for
+# the individuals of `hap`, from per-locus counts of the dosages d:
+# Σ_i (d - 2p)² = Σd² - 4pΣd + 4np², with Σd² = Σd + 2·#[d = 2]. No dosage
+# or floating-point matrix of loci × individuals is formed.
+function _fgrm(hap::Haplotype, seg, p0)
+    s1 = _locus_counts(hap)[seg]                           # copies of allele 1 per locus
+    hom = _locus_counts(hap, true)[seg]                    # individuals with two copies
+    m, n = length(seg), hap.nhp ÷ 2
     tot = 0.0
     for k = 1:m
         c = 2 * p0[k]
@@ -1680,9 +1723,9 @@ function generation_summary(pop::Population, g::Integer; weights = ones(ntraits(
     hap = pop.blocks[g+1]
     F = nrm_diag(pop.sire, pop.dam)[ids] .- 1
     θ = mean(nrm(pop.sire, pop.dam, ids)) / 2             # mean coancestry, self included
-    H(h) = (p = vec(sum(dosage(h, 1:h.nlc); dims = 2)) ./ h.nhp; mean(2 .* p .* (1 .- p)))
+    H(p) = mean(2 .* p .* (1 .- p))
     h0 = pop.blocks[1]
-    p0 = vec(sum(dosage(h0, 1:h0.nlc); dims = 2)) ./ h0.nhp
+    p0 = _frequencies(h0)
     seg = findall(x -> 0 < x < 1, p0)
     Fgrm = _fgrm(hap, seg, p0[seg])
     k = ntraits(pop)
@@ -1701,7 +1744,7 @@ function generation_summary(pop::Population, g::Integer; weights = ones(ntraits(
             Tuple(C[j, l] for (j, l) in pairs))
         out = merge(out, per, rg)
     end
-    merge(out, (F = mean(F), coancestry = θ, Fhet = 1 - (1 - θ0(pop)) * H(hap) / H(pop.blocks[1]), Fgrm = Fgrm,
+    merge(out, (F = mean(F), coancestry = θ, Fhet = 1 - (1 - θ0(pop)) * H(_frequencies(hap)) / H(p0), Fgrm = Fgrm,
         alive = count(i -> pop.generation[i] <= g < pop.exit[i], 1:length(pop))),
         segs === nothing ? NamedTuple() : (Fseg = mean(segment_inbreeding(segs; ids = ids)),))
 end

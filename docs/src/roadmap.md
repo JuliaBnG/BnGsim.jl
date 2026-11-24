@@ -60,7 +60,7 @@ a dependency, and BnGsim does not aim for API compatibility with them.
 Sequence-level forward simulation belongs in FisherWright (or SLiM), not
 here.
 
-## 2. Current status (v0.35.0)
+## 2. Current status (v0.36.0)
 
 | Area | State |
 | :--- | :--- |
@@ -524,9 +524,10 @@ and of resume history. Three things are not yet stable:
    0.30 (and their set depends on the traits and the selection method);
    readers by position broke each time. There is no version of the
    output files.
-3. **The time estimate** is calibrated on single-trait scenarios; for
-   multi-trait scenarios with repeated records it is about five times
-   too low (the memory estimate holds; see "Resource estimate").
+3. **The time estimate** is calibrated on single-trait scenarios with
+   small genomes; for large genomes and multi-trait scenarios with
+   repeated records it was about five times too low, and after the
+   performance fixes of 0.36.0 two to three times (the memory estimate holds; see "Resource estimate").
 
 **The Julia API** has three layers:
 
@@ -576,5 +577,8 @@ and of resume history. Three things are not yet stable:
 0.35.0: b (`results_sha256`, which `bngsim merge` compares; the schema
 policy in "Scenarios") and d (`outputs_version` 1 and the page "Output
 files"; the columns of `summary.csv` pinned by tests). What remains open
-for 1.0 is item 3 of the contract: the time estimate of multi-trait
-scenarios with repeated records.
+for 1.0 is item 3 of the contract: the time estimate of large genomes and
+multi-trait scenarios with repeated records. 0.36.0 removed two costs
+that grew with the genome (the examples now run two to three times their
+estimate, not five); the recalibration with terms for founder sampling,
+per-step genome work and multi-trait equations follows.
