@@ -25,6 +25,7 @@ using .RelationshipsAdapter
 import .RelationshipsAdapter: founder_segments
 using .BreedingAdapter
 
+include("phases.jl")
 include("keys.jl")
 include("loci.jl")
 include("meiosis.jl")

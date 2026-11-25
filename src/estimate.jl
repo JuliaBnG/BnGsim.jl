@@ -97,12 +97,31 @@ const _MEM = (
 # measured to expected peak over every calibration and held-out run (1.153,
 # 44 runs), with 10 % added and rounded up.
 const _MEM_BOUND_FACTOR = 1.3
-# Run time, fitted to the same runs: seconds per allele carried through one
-# meiosis in the historical run; per evaluated animal and step; per cube of
-# the genotyped set and step; and a fixed cost of the dense evaluations
-# (mostly compilation, as they are not in the precompile workload).
-const _TIME = (history = 7.63e-10, pedigree = 1.139e-5, dense = 8.446e-12, dense_fixed = 4.48,
-    reliability = 1.2e-8)   # per candidate × equation and step (report_reliability; 0.22, PBLUP)
+# Run time (0.37): seconds per unit of each feature of `_time_features`,
+# each phase fitted to its own timings (validation/estimate/fit_phases.jl
+# on the phase timings of run_phases.sh, phases.tsv: 51 scenarios, two
+# processes each, on an AMD Ryzen 9 5950X, Linux x86_64, Julia 1.13.4, 8
+# threads); `history` per allele carried through one meiosis of the
+# historical run and `history_cache` the same times `_cache_factor`,
+# `rest` per time step and `rest_animal` per animal and step, `compile`
+# the cold-minus-warm cost of the first replicate by what the scenario
+# uses (`_compile_flags`). Terms fitted to zero are kept so that the
+# fit can be rerun: in particular the cubic terms of the dense equations
+# and inverses are not distinguishable from the quadratic ones up to the
+# 13 000 genotyped animals of the calibration.
+const _TIME = (
+    history = 2.226e-10, history_cache = 9.562e-11,
+    setup = 2.729e-9, setup_fixed = 0.003429,
+    meiosis = 2.043e-11,
+    summary_genome = 7.864e-11, summary_pedigree = 2.483e-9,
+    equations = 1.514e-6, equations2 = 0.0, dense = 0.0, dense2 = 4.145e-8,
+    reml_equations = 1.742e-5, reml_dense = 8.445e-11, records = 0.0,
+    grm = 5.465e-12, inverse = 0.0, grm_ss = 7.235e-12, inverse_ss = 0.0,
+    mating = 2.364e-8,
+    reliability = 8.329e-9,
+    rest = 0.003437, rest_animal = 3.833e-7,
+    compile = (0.495, 0.0, 0.0, 0.627, 0.0, 0.498, 0.0, 0.288),
+)
 # Terms added after the calibration, from the data structures rather than a
 # fit (docs/src/estimate.md, "Later terms"): bytes per repeated record
 # (four vectors of 4, 4, 4 and 8 bytes, with up to twice that from their
@@ -113,6 +132,25 @@ const _MEM_RECORD = 40.0
 # fitted to one scenario with four histories (validation/estimate/later).
 const _MEM_HISTORY_STORED = 2.4
 const _MEM_RELIABILITY = 8.0 * 64
+# The dense matrices of several traits and of REML (0.37), which the 0.15
+# calibration (one trait, no REML) did not cover: bytes per byte of the
+# genotyped × genotyped matrix per k² - 1 for k traits, and per k² with
+# REML; fitted to the peaks of the multi-trait and REML scenarios of the
+# time calibration (validation/estimate/fit_phases.jl, Ryzen 9 5950X).
+# Fitted on two scenarios per evaluation (mt2_gblup and reml2_gblup;
+# mt2_ssgblup and rep2_ssgblup), so exactly; REML with ssGBLUP uses the
+# GBLUP value. Held out in check/: three traits, REML with one and two
+# traits, ssGBLUP with REML, repeated records (mean/expected 0.94 to 1.13).
+const _MEM_TRAITS = (gblup = 9.7, ssgblup = 15.1)
+const _MEM_REML = 9.95
+
+# Bytes per byte of one dense genotyped × genotyped matrix.
+function _dense_factor(s::Scenario)
+    ev, k = s.scheme.evaluation, length(s.traits)
+    ev in (:gblup, :ssgblup) || return 0.0
+    c, t = ev === :gblup ? (_MEM.dense_gblup, _MEM_TRAITS.gblup) : (_MEM.dense_ssgblup, _MEM_TRAITS.ssgblup)
+    return c + t * (k^2 - 1) + (s.scheme.reml ? _MEM_REML * k^2 : 0.0)
+end
 
 # The memory terms of a scenario, in bytes.
 function _memory_terms(s::Scenario, z::ScenarioSize)
@@ -123,10 +161,102 @@ function _memory_terms(s::Scenario, z::ScenarioSize)
         baseline = _MEM.baseline,
         history = 8.0 * z.census * z.alleles * (_MEM.history + _MEM_HISTORY_STORED * (z.histories - 1)),
         genomes = _MEM.genomes * z.animals * 2 * z.loci / 8,
-        dense = (ev === :gblup ? _MEM.dense_gblup : ev === :ssgblup ? _MEM.dense_ssgblup : 0.0) * dense,
+        dense = _dense_factor(s) * dense,
         records = _MEM_RECORD * z.records,
         reliability = s.scheme.report_reliability && ev in (:pblup, :gblup, :ssgblup) ?
             _MEM_RELIABILITY * k * z.equations : 0.0,
+    )
+end
+
+# The alleles carried through meiosis over one historical run, generation
+# by generation with the census trajectory.
+function _carried(s::Scenario, z::ScenarioSize = ScenarioSize(s))
+    f = s.founders
+    μL = f.mr * 1e-8 * sum(s.species.chromosome)
+    sizes = [f.popsize === nothing ? fill(f.ne, f.nt) : _trajectory(f.popsize, f.ne).(1:f.nt); f.decline]
+    return sum(2 * sizes[g] * μL * min(g, 4z.census) for g in eachindex(sizes); init=0.0)
+end
+
+# The cost per carried allele grows as the haplotypes of one generation,
+# about 2 × census × alleles × 8 bytes, outgrow the processor caches: the
+# factor log2 of that size over 16 MB, zero below (validation/estimate).
+_cache_factor(z::ScenarioSize) = max(0.0, log2(16.0 * z.census * z.alleles / 2^24))
+
+# The sizes the time model of the breeding loop grows with (0.37), per
+# replicate, summed over the time steps g = 0, …, steps - 1 at which the
+# loop evaluates and selects (the pedigree then holds nid + g·noff
+# animals). Shared by `resource_estimate` and validation/estimate/fit_phases.jl.
+function _time_features(s::Scenario, z::ScenarioSize = ScenarioSize(s))
+    f, sc = s.founders, s.scheme
+    nid, noff, T, k = f.nid, sc.noff, s.steps, length(s.traits)
+    ev = sc.evaluation
+    dense = ev in (:gblup, :ssgblup)
+    blup = ev in (:pblup, :gblup, :ssgblup)
+    pe = any(t -> t.records > 1 && t.repeatability > t.h2, s.traits) ? 2 : 1
+    size(c) = c == 0 ? nid : noff                          # cohort c
+    function ngen(g)                                       # genotyped at step g
+        dense || return 0
+        (ev === :gblup || sc.genotyped_cohorts == 0) && return nid + g * noff
+        return sum(size(c) for c = max(0, g - sc.genotyped_cohorts + 1):g)
+    end
+    L = z.loci
+    steps = 0:T-1
+    animals(g) = nid + g * noff
+    return (
+        setup = 2.0 * nid * L,                             # founder haplotypes × loci
+        meiosis = T * 2.0 * noff * L,                      # offspring haplotypes × loci
+        summary_genome = sum(2.0 * (size(g) + nid) * L for g = 0:T),   # counts over cohort and founders
+        summary_pedigree = sum(float(animals(g)) * size(g) for g = 0:T), # relationships of the cohort
+        equations = blup ? sum(float(animals(g)) * k * pe for g in steps) : 0.0,
+        equations2 = blup ? sum(float(animals(g)) * (k * pe)^2 for g in steps) : 0.0,  # k × k blocks
+        dense = sum((float(k) * ngen(g))^3 for g in steps),
+        dense2 = sum((float(k) * ngen(g))^2 for g in steps),
+        reml_equations = blup && sc.reml ? sum(float(animals(g)) * k * pe for g in steps) : 0.0,
+        reml_dense = sc.reml ? sum((float(k) * ngen(g))^3 for g in steps) : 0.0,
+        records = z.records * (T + 1) / 2,                 # records made by each step, summed
+        grm = s.chip === nothing ? 0.0 : sum(float(ngen(g))^2 * s.chip.nlc for g in steps),
+        inverse = sum(float(ngen(g))^3 for g in steps),
+        grm_ss = ev === :ssgblup && s.chip !== nothing ? sum(float(ngen(g))^2 * s.chip.nlc for g in steps) : 0.0,
+        inverse_ss = ev === :ssgblup ? sum(float(ngen(g))^3 for g in steps) : 0.0,   # H: A22 and its inverse
+        mating = sc.mating === :min_coancestry ? sum(float(animals(g)) * (sc.nsire + sc.ndam) for g in steps) : 0.0,
+        reliability = sc.report_reliability && blup ? T * float(noff) * k * z.equations : 0.0,
+        animals = sum(float(animals(g)) for g in steps),  # records, phenotypes, selection, culling
+    )
+end
+
+# What the first replicate compiles: always; BLUP; dense G; ssGBLUP;
+# several traits; repeated records; REML; minimum-coancestry mating.
+function _compile_flags(s::Scenario)
+    sc = s.scheme
+    ev = sc.evaluation
+    return (1.0, float(ev in (:pblup, :gblup, :ssgblup)), float(ev in (:gblup, :ssgblup)), float(ev === :ssgblup),
+        float(length(s.traits) > 1), float(any(t -> t.records > 1, s.traits)), float(sc.reml),
+        float(sc.mating === :min_coancestry))
+end
+
+# The run time by part, in seconds: the historical runs, and over all
+# replicates the founder setup, meiosis, summaries, evaluation (with the
+# G or H inverse), mating, reliabilities, the rest of the loop, and the
+# compilation of the first replicate.
+function _time_terms(s::Scenario, z::ScenarioSize = ScenarioSize(s))
+    f, c = s.founders, _TIME
+    x = _time_features(s, z)
+    nh = f.shared_history ? min(f.histories, s.replicates) : s.replicates
+    isempty(f.history_dir) || (nh = 0)                     # read, not simulated
+    R = s.replicates
+    return (
+        history = nh * _carried(s, z) * (c.history + c.history_cache * _cache_factor(z)),
+        setup = R * (c.setup * x.setup + c.setup_fixed),
+        meiosis = R * c.meiosis * x.meiosis,
+        summary = R * (c.summary_genome * x.summary_genome + c.summary_pedigree * x.summary_pedigree),
+        evaluation = R * (c.equations * x.equations + c.equations2 * x.equations2 + c.dense * x.dense +
+                          c.dense2 * x.dense2 + c.reml_equations * x.reml_equations + c.reml_dense * x.reml_dense +
+                          c.records * x.records + c.grm * x.grm + c.inverse * x.inverse + c.grm_ss * x.grm_ss +
+                          c.inverse_ss * x.inverse_ss),
+        mating = R * c.mating * x.mating,
+        reliability = R * c.reliability * x.reliability,
+        rest = R * (c.rest * s.steps + c.rest_animal * x.animals),
+        compile = sum(c.compile .* _compile_flags(s)),
     )
 end
 
@@ -146,12 +276,18 @@ The resources scenario `s` needs, from the scenario alone:
   exceeded, with a margin;
 - `disk_bytes`: the files `bngsim run` writes;
 - `seconds`: a rough run time of all replicates (historical population and
-  breeding loop), on the calibration host within a factor of about two;
+  breeding loop), on the calibration host of the time model mostly within
+  about ±30 % (up to 2.1 times low on one scenario; likely low beyond
+  13 000 genotyped animals);
+- `time_terms`: `seconds` by part: the historical runs, and over all
+  replicates the founder setup, meiosis, summaries, evaluation (with the
+  G or H inverse), mating, reliabilities, the rest of the loop, and the
+  compilation of the first replicate;
 - `size`: the [`ScenarioSize`](@ref) the terms are computed from.
 
-The coefficients are calibrated on one host and thread count (see the
-documentation page "Resource estimate"); memory and time differ on
-others, and the garbage collector makes the peak of a given run vary by
+The coefficients are calibrated at one thread count, memory and time on
+two hosts (see the documentation page "Resource estimate"); memory and
+time differ on others, and the garbage collector makes the peak of a given run vary by
 about 10 %. Replicates run one after the other, so memory does not grow
 with their number.
 """
@@ -159,21 +295,11 @@ function resource_estimate(s::Scenario)
     z = ScenarioSize(s)
     terms = _memory_terms(s, z)
     peak = sum(values(terms))
-    f = s.founders
-    t = f.nt + length(f.decline)
-    μL = f.mr * 1e-8 * sum(s.species.chromosome)
-    # alleles carried through meiosis over the historical run, generation by
-    # generation with the census trajectory
-    sizes = [f.popsize === nothing ? fill(f.ne, f.nt) : _trajectory(f.popsize, f.ne).(1:f.nt); f.decline]
-    carried = sum(2 * sizes[g] * μL * min(g, 4z.census) for g in eachindex(sizes); init=0.0)
-    nh = f.shared_history ? min(f.histories, s.replicates) : s.replicates
-    isempty(f.history_dir) || (nh = 0)                     # read, not simulated
-    rel = s.scheme.report_reliability ? _TIME.reliability * s.scheme.noff * length(s.traits) * z.equations : 0.0
-    loop = s.replicates * s.steps * (_TIME.pedigree * z.evaluated + _TIME.dense * float(z.genotyped)^3 + rel) +
-           (s.scheme.evaluation in (:gblup, :ssgblup) ? _TIME.dense_fixed : 0.0)
-    seconds = nh * _TIME.history * carried + loop
+    tt = _time_terms(s, z)
+    seconds = sum(values(tt))
     rows = s.replicates * (s.steps + 1)
     disk = 4096 + 2length(scenario_json(s)) + 400 * rows
     return (; peak_rss_bytes=round(Int, peak), peak_rss_bound_bytes=round(Int, _MEM_BOUND_FACTOR * peak),
-        memory_terms=map(x -> round(Int, x), terms), disk_bytes=disk, seconds=round(seconds; digits=1), size=z)
+        memory_terms=map(x -> round(Int, x), terms), disk_bytes=disk, seconds=round(seconds; digits=1),
+        time_terms=map(x -> round(x; digits=1), tt), size=z)
 end

@@ -967,7 +967,7 @@ function evaluate!(pop::Population, sc::Scheme)
     end
     P = pop.phenotype[v.ids, :]
     n = length(v)
-    Kinv = _kinv(pop, sc, v)
+    Kinv = @_phase kinv _kinv(pop, sc, v)
     # Genetic and residual components are not separable from records of
     # unrelated animals only (the founders at step 0): REML waits for every
     # trait to be recorded on an animal with a known parent.
@@ -1385,22 +1385,23 @@ function step!(pop::Population, sc::Scheme, mm::MeiosisMap)
     g = current_step(pop)
     _record!(pop, g)
     w = index_weights(pop, sc)
-    m = evaluate!(pop, sc)
+    m = @_phase evaluate evaluate!(pop, sc)
     cand = generation_ids(pop, g)
-    acc = merge(_accuracies(pop, cand, w), _reliabilities(pop, sc, m, cand, w))
+    acc = @_phase reliability merge(_accuracies(pop, cand, w), _reliabilities(pop, sc, m, cand, w))
     elig = _eligible(pop, sc, g)
-    s, ns, d, nd, info = select_parents(pop, sc, m)
-    plan = mating_plan(pop, s, ns, d, nd; mating = sc.mating, pair_limit = sc.pair_limit, index = pop.ebv * w)
+    s, ns, d, nd, info = @_phase select select_parents(pop, sc, m)
+    plan = @_phase mating mating_plan(pop, s, ns, d, nd; mating = sc.mating, pair_limit = sc.pair_limit,
+        index = pop.ebv * w)
     L = mean(g + 1 .- pop.generation[plan])
     ints = _intensities(pop.ebv * w, elig, plan)
     _cull_and_survive!(pop, sc, g, [s; d])
     # the parents' haplotypes, gathered from their cohorts; offspring
     # depend on the parents' alleles and the keys only, not on this order
     ups = sort!(unique(plan))
-    parents = _haplotypes(pop, ups)
+    parents = @_phase meiosis _haplotypes(pop, ups)
     off = Haplotype(parents.nlc, 2sc.noff)
     local_plan = map(i -> searchsortedfirst(ups, i), plan)
-    if sc.record_meiosis
+    @_phase meiosis if sc.record_meiosis
         _, r = make_progeny!(off, parents, local_plan, mm, SimKey(pop.key; generation = g + 1); record = true)
         push!(pop.meioses, MeiosisRecord(ups[r.parent], r.phase, r.ptr, r.pos))
     else
@@ -1430,8 +1431,8 @@ function step!(pop::Population, sc::Scheme, mm::MeiosisMap)
     append!(pop.slot, Int32.(1:sc.noff))
     _sexes!(pop, ids, g + 1)
     _phenotypes!(pop, ids, g + 1)
-    segs = sc.record_meiosis ? founder_segments(pop, mm) : nothing
-    out = merge(generation_summary(pop, g; weights = w, segs = segs), acc,
+    segs = @_phase summary sc.record_meiosis ? founder_segments(pop, mm) : nothing
+    out = merge((@_phase summary generation_summary(pop, g; weights = w, segs = segs)), acc,
         (nsire = length(s), ndam = length(d), L = L), ints, _vc(pop), info)
     sc.retain == :active && _drop_genomes!(pop, sc)
     return out
@@ -1770,8 +1771,9 @@ end
 # The summary of the last cohort, which closes the table of `simulate!`
 # (no selection took place in it).
 function _final_row(pop::Population, sc::Scheme, mm::MeiosisMap)
-    segs = sc.record_meiosis ? founder_segments(pop, mm) : nothing
-    return merge(generation_summary(pop, current_step(pop); weights = index_weights(pop, sc), segs = segs),
+    segs = @_phase summary sc.record_meiosis ? founder_segments(pop, mm) : nothing
+    return merge((@_phase summary generation_summary(pop, current_step(pop); weights = index_weights(pop, sc),
+            segs = segs)),
         _no_accuracy(pop), _no_reliability(pop), (nsire = 0, ndam = 0, L = NaN),
         (intensity_sire = NaN, intensity_dam = NaN),
         _vc(pop), _no_ocs(sc))

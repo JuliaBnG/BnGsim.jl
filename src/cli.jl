@@ -468,9 +468,10 @@ function _cli_estimate(args, stdout, stderr)
         "peak_rss_bytes" => e.peak_rss_bytes, "peak_rss_bound_bytes" => e.peak_rss_bound_bytes,
         "memory_terms" => O(string(k) => v for (k, v) in pairs(e.memory_terms)),
         "disk_bytes" => e.disk_bytes, "seconds" => e.seconds,
+        "time_terms" => O(string(k) => v for (k, v) in pairs(e.time_terms)),
         "size" => O(string(f) => getfield(z, f) for f in fieldnames(ScenarioSize)),
-        "calibration" => "AMD Threadripper 3970X, Linux x86_64, Julia 1.13.4, 8 threads; memory within ±15 % " *
-                         "(scenario means), time within a factor of about two"))
+        "calibration" => "Linux x86_64, Julia 1.13.4, 8 threads; memory on AMD Threadripper 3970X, within " *
+                         "±15 % (scenario means); time on AMD Ryzen 9 5950X, within about ±30 % per replicate"))
     return ExitCode.OK
 end
 

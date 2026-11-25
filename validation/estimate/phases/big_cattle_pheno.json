@@ -1,0 +1,6 @@
+{"schema": "bngsim-scenario", "schema_version": 1, "name": "big_cattle_pheno", "seed": 1, "replicates": 2, "steps": 5,
+ "species": {"preset": "Cattle"},
+ "founders": {"ne": 1000, "nt": 1000, "mr": 1.0, "nid": 500},
+ "loci": {"qtl": {"nlc": 200, "maf": 0.01}},
+ "traits": [{"name": "y", "h2": 0.3}],
+ "scheme": {"noff": 500, "nsire": 25, "ndam": 250, "evaluation": "phenotype"}}
