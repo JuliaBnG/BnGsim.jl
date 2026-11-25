@@ -166,6 +166,9 @@ end
         qtl_set = SNPSet("qtl", 20; maf = 0.01, exclusive = true)
         panels = sample_loci(hap0, vm0, chip_set, qtl_set; rng = MersenneTwister(102))
         @test length(panels) == 2
+        # 0.38: no global-generator default; the internals are not exported
+        @test_throws UndefKeywordError sample_loci(hap0, vm0, chip_set)
+        @test isempty(intersect((:philox4x64, :keyed_int, :transport), names(BnGsim)))
         @test length(panels[1]) == 40 && length(panels[2]) == 20
         @test isempty(intersect(panels[1].loci, panels[2].loci))
 

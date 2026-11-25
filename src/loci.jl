@@ -3,19 +3,22 @@
         hap::Haplotype,
         vm::VariantMap,
         sets::SNPSet...;
-        rng::AbstractRNG = Random.default_rng(),
+        rng::AbstractRNG,
     ) -> Vector{LocusSet}
 
 Sample one or more `BnGStructs.LocusSet` panels from `vm` according to the
 specifications in `sets::SNPSet...` (locus count `nlc`, `maf` threshold, and `exclusive` flag).
 
 Allele frequencies are taken from `vm.frq` if non-empty, or computed directly from `hap`.
+
+`rng` is required (0.38): pass a keyed generator, `keyed_rng(SimKey(…))`, to
+draw inside the keyed streams of the run; a scenario does so.
 """
 function sample_loci(
     hap::Haplotype,
     vm::VariantMap,
     sets::SNPSet...;
-    rng::AbstractRNG = Random.default_rng(),
+    rng::AbstractRNG,
 )
     nlc = hap.nlc
     nlc == length(vm) || throw(DimensionMismatch("Haplotype and VariantMap locus counts do not match"))

@@ -35,17 +35,17 @@ end
         cap = rand(rng, (1, 2, typemax(Int)))
         best = _brute_transport(a, b, C, cap)
         if isinf(best)
-            @test_throws ArgumentError transport(a, b, C; cap = cap)
+            @test_throws ArgumentError BnGsim.transport(a, b, C; cap = cap)
         else
-            F = transport(a, b, C; cap = cap)
+            F = BnGsim.transport(a, b, C; cap = cap)
             @test vec(sum(F; dims = 2)) == a && vec(sum(F; dims = 1)) == b && all(0 .<= F .<= cap)
             @test sum(C .* F) ≈ best atol = 1e-9
-            @test transport(a, b, C; cap = cap) == F          # deterministic
+            @test BnGsim.transport(a, b, C; cap = cap) == F          # deterministic
         end
     end
-    @test_throws ArgumentError transport([1], [2], ones(1, 1))
-    @test_throws ArgumentError transport([1], [1], -ones(1, 1))
-    @test_throws DimensionMismatch transport([1, 1], [2], ones(1, 1))
+    @test_throws ArgumentError BnGsim.transport([1], [2], ones(1, 1))
+    @test_throws ArgumentError BnGsim.transport([1], [1], -ones(1, 1))
+    @test_throws DimensionMismatch BnGsim.transport([1, 1], [2], ones(1, 1))
 end
 
 @testset "Mating: plans" begin
