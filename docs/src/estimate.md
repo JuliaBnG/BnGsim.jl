@@ -77,17 +77,17 @@ holds further matrices of that size, so the dense term is ``8 n_g^2`` times
 c + t\,(k^2 - 1) + r\,k^2\,[\text{REML}],
 ```
 
-with ``c`` the one-trait multiple above, ``t = 9.7`` (`:gblup`) and
-``15.1`` (`:ssgblup`), and ``r = 9.95``. Until 0.36 the term ignored
+with ``c`` the one-trait multiple above, ``t = 9.83`` (`:gblup`) and
+``15.1`` (`:ssgblup`), and ``r = 9.85``. Until 0.36 the term ignored
 ``k`` and REML, and the peaks of such runs exceeded the bound: up to 1.85
 times with two traits and 3.06 times with two traits under REML (amd, 8
 threads). ``t`` and ``r`` are fitted to the peaks of the time calibration
-(below), two scenarios per evaluation, so exactly; REML with ssGBLUP uses
-the GBLUP value of ``r``. Five held-out scenarios in
+(below): three scenarios with GBLUP, two (so exactly) with ssGBLUP; REML
+with ssGBLUP uses the GBLUP value of ``r``. Five held-out scenarios in
 `validation/estimate/check/` (three traits; REML with one trait, and with
 two traits under ssGBLUP; repeated records with GBLUP; three traits with
 repeated records) had mean peaks 0.94 to 1.13 times their expectation.
-Over all 51 scenarios of the time calibration the largest peak is 0.96
+Over all 56 scenarios of the time calibration the largest peak is 0.96
 times its bound (the table at the end of the fit below). These peaks were
 measured on the time calibration host, the one-trait multiples on the
 memory calibration host; on the one-trait scenarios the two agree within
@@ -155,7 +155,7 @@ The time model is calibrated on a different host from the memory model:
 an AMD Ryzen 9 5950X (16 cores, 93 GB), Linux x86_64, Julia 1.13.4, 8
 threads, BnGsim 0.37, otherwise idle. `validation/estimate/run_phases.sh`
 runs every scenario of `scenarios/`, `later/`, `phases/` and `check/` and
-the examples, 51 in all, in two processes; each process runs replicate 1
+the examples, 56 in all, in two processes; each process runs replicate 1
 (cold, with compilation) and replicate 2 (warm), each with its own
 history, timing every phase (`measure_phases.jl`, `phases.tsv`).
 `fit_phases.jl` fits each phase to the mean warm time of its scenarios by
@@ -165,13 +165,15 @@ examples, the held-out scenarios `v1`–`v6` of the memory calibration and
 `check/` are held out.
 
 On every scenario over 1 s but one, measured warm time per replicate was
-0.92 to 1.22 times the model on the calibration scenarios, and 0.89 to
-1.45 on the held-out ones (`dairy.json` 1.04, `sheep.json` 1.26). The
-largest held-out misses are REML (1.45 with one trait under GBLUP, 1.24
+0.77 to 1.28 times the model on the calibration scenarios, and 0.88 to
+1.49 on the held-out ones (`dairy.json` 1.05, `sheep.json` 1.26). The
+lowest, 0.77, is GBLUP with a 20 000-locus chip: forming G costs less
+per locus with long chips than the linear term assumes, so the estimate
+is high there. The largest held-out misses are REML (1.49 with one trait under GBLUP, 1.24
 with two under ssGBLUP): REML's cost is its number of iterations, which
 depends on the data, not on the size. The exception is `l_records`
 (three traits, two with repeated records, 3000 offspring per step for
-ten steps): 2.1 times the model, all in the evaluation, whose cost per
+ten steps): 2.2 times the model, all in the evaluation, whose cost per
 equation is 5.7 µs against 0.6 to 2.1 µs in every other PBLUP scenario;
 a smaller scenario of the same kind (`check/c_rep3_pblup.json`) is at
 0.99, so this is the solver's convergence on that scenario rather than a
@@ -179,13 +181,20 @@ missing size term. Compilation is modelled to within about 1 s, worse
 under REML, whose cold-minus-warm difference also carries the difference
 in iterations between the two replicates.
 
-Limits. The cubic terms of the dense equations and of the G and H
-inverses fitted to zero: up to the largest calibration scenario (13 000
-genotyped animals under GBLUP, 9800 under ssGBLUP, ``k n_g`` up to
-13 000) the quadratic terms account for them, and beyond it the estimate
-is likely low. The run time depends on the host and on the number of
-threads; on others it is a relative guide only. The history term
-depends on the processor caches.
+Limits. The calibration reaches 20 000 genotyped animals (GBLUP and
+ssGBLUP) and ``k n_g = 20 000`` (two traits); beyond, the estimate
+extrapolates its cubic terms. In 0.37.0 these had fitted to zero, because
+every scenario up to 13 000 genotyped animals had the same chip, so that
+forming G (``n_g^2`` × chip) and inverting it (``n_g^3``) could not be
+told apart; with 20 000 genotyped animals and a 1000-locus chip the
+inverse alone took 21 s and 0.37.0 estimated 3 s. 0.37.1 adds scenarios
+up to 20 000 genotyped animals with chips of 1000, 5000 and 20 000 loci:
+the inverse costs ``1.66 \times 10^{-12}`` s per ``n_g^3`` (about 600
+GFLOPS for the ``n_g^3`` operations of `inv(cholesky(G))`; BLAS chooses
+its own threads, independently of Julia's), and the dense equations a further ``2.2 \times
+10^{-13}`` s per ``(k n_g)^3``. The run time depends on the host and on
+the number of threads; on others it is a relative guide only. The history
+term depends on the processor caches.
 
 The fit, as `fit_phases.jl` prints it:
 
