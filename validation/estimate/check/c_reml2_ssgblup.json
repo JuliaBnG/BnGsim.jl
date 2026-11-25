@@ -1,0 +1,7 @@
+{"schema": "bngsim-scenario", "schema_version": 1, "name": "c_reml2_ssgblup", "seed": 1, "replicates": 2, "steps": 6,
+ "species": {"name": "toy", "chromosome": [50000000, 50000000]},
+ "founders": {"ne": 1000, "nt": 1000, "mr": 1.0, "nid": 1000},
+ "loci": {"qtl": {"nlc": 200, "maf": 0.01}, "chip": {"nlc": 5000, "maf": 0.05}},
+ "traits": [{"name": "y", "h2": 0.3}, {"name": "z", "h2": 0.1}],
+ "genetic_correlation": [[1.0, 0.3], [0.3, 1.0]],
+ "scheme": {"noff": 1000, "nsire": 50, "ndam": 250, "evaluation": "ssgblup", "weights": [1.0, 1.0], "genotyped_cohorts": 2, "reml": true}}

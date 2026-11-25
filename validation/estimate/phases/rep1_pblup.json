@@ -1,0 +1,6 @@
+{"schema": "bngsim-scenario", "schema_version": 1, "name": "rep1_pblup", "seed": 1, "replicates": 2, "steps": 8,
+ "species": {"name": "toy", "chromosome": [50000000, 50000000]},
+ "founders": {"ne": 1000, "nt": 1000, "mr": 1.0, "nid": 1000},
+ "loci": {"qtl": {"nlc": 200, "maf": 0.01}},
+ "traits": [{"name": "y", "h2": 0.3, "sex": 0, "age": 1, "records": 4, "repeatability": 0.5}],
+ "scheme": {"noff": 1000, "nsire": 30, "ndam": 400, "evaluation": "pblup", "min_sire_age": 1, "max_sire_age": 4, "min_dam_age": 1, "max_dam_age": 5}}

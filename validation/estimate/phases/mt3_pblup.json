@@ -1,0 +1,7 @@
+{"schema": "bngsim-scenario", "schema_version": 1, "name": "mt3_pblup", "seed": 1, "replicates": 2, "steps": 6,
+ "species": {"name": "toy", "chromosome": [50000000, 50000000]},
+ "founders": {"ne": 1000, "nt": 1000, "mr": 1.0, "nid": 1000},
+ "loci": {"qtl": {"nlc": 200, "maf": 0.01}},
+ "traits": [{"name": "y", "h2": 0.3}, {"name": "z", "h2": 0.1}, {"name": "u", "h2": 0.5}],
+ "genetic_correlation": [[1.0, 0.3, 0.0], [0.3, 1.0, -0.2], [0.0, -0.2, 1.0]],
+ "scheme": {"noff": 2000, "nsire": 50, "ndam": 500, "evaluation": "pblup", "weights": [1.0, 1.0, 1.0]}}

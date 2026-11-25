@@ -989,7 +989,7 @@ the number of threads.
 """
 function run_replicate(s::Scenario, r::Integer=1; history=nothing)
     r >= 1 || throw(ArgumentError("replicates are numbered from 1"))
-    rep = _setup_replicate(s, r, history)
+    rep = @_phase setup _setup_replicate(s, r, history)
     summary = simulate!(rep.population, rep.scheme, rep.meiosis, s.steps)
     return (; population=rep.population, summary, species=rep.species, map=rep.map, qtl=rep.qtl, chip=rep.chip)
 end

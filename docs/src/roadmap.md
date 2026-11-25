@@ -60,7 +60,7 @@ a dependency, and BnGsim does not aim for API compatibility with them.
 Sequence-level forward simulation belongs in FisherWright (or SLiM), not
 here.
 
-## 2. Current status (v0.36.0)
+## 2. Current status (v0.37.0)
 
 | Area | State |
 | :--- | :--- |
@@ -74,7 +74,7 @@ here.
 | Breeding loop | `Population` (ids equal rows; nothing is removed), `Scheme`, `step!`/`simulate!`: discrete or overlapping generations (parents up to a maximum age), one or several additive traits with sex- and age-limited records, selection on an index of multi-trait EBVs, optional (multi-trait) REML re-estimation of the covariance components, survival and culling, single-step GBLUP with a genotyped window, OCS with a target ΔF per generation for overlapping generations (newborn-cohort, age-weighted per year, age-weighted per generation), crossover records kept for realized IBD from founder segments (`founder_segments`, RelationshipMatrices 0.7.1), checkpoints that resume a run identically, evaluation through Breeding.jl (`:tbv`, `:phenotype`, `:pblup`, `:gblup`, `:ssgblup`), optionally on a window of recent cohorts and their traced ancestors through a `PedigreeView` (id ↔ row, topological, `0` for parents outside), selection by truncation, `TM1997`, `rocs` or at random, `(criterion, id)` ranking, keyed pairing and meiosis, per-generation summaries. |
 | Scenarios | A versioned JSON scenario (`Scenario`, schema `"bngsim-scenario"` version 1, 0.13.0): species, historical population and founders, QTL and chip panels, traits, scheme, steps, seed, replicates. Reading and validation that report every problem with its path (unknown, repeated and mistyped keys, ranges, combinations), a canonical form that survives a JSON round trip, and `run_scenario`/`run_replicate`, keyed so that a replicate does not depend on the others or on threads. |
 | Command line | `bin/bngsim validate | run | version` (0.14.0, CLI interface 1): one JSON object on stdout, diagnostics on stderr, enumerated exit codes; `run` writes the canonical scenario, `summary.csv` (byte-identical at 1 and 8 threads) and `provenance.json` (scenario and its SHA-256, versions, manifest hash, host, CPU, threads, times, output hashes; I2), and never overwrites. A precompile workload brings a cold `bngsim run examples/minimal.json` to about 3 s (Phase 0 gate: under 10 s). |
-| Resource estimate | `resource_estimate` / `bngsim estimate` (0.15.0): expected peak memory from a component model (process, historical population, genomes, dense evaluation; sizes from neutral theory), fitted on 16 scenarios and checked on 6 held out (every mean within 15 %; `examples/minimal.json` within 10 %), a bound of 1.3 × the expectation that no run exceeded, disk, and a rough run time; `run --memory-limit` refuses a scenario whose bound exceeds it (exit code 5). Calibrated on one host; scripts in `validation/estimate/`. |
+| Resource estimate | `resource_estimate` / `bngsim estimate` (0.15.0): expected peak memory from a component model (process, historical population, genomes, dense evaluation; sizes from neutral theory), fitted on 16 scenarios and checked on 6 held out (every mean within 15 %; `examples/minimal.json` within 10 %), a bound of 1.3 × the expectation that no run exceeded (0.37.0: with terms for several traits and REML, checked on 51 scenarios), disk, and a run time by phase (0.37.0: 51 scenarios, mostly within ±30 % per replicate) with `time_terms`; `run --memory-limit` refuses a scenario whose bound exceeds it (exit code 5). Memory calibrated on a Threadripper 3970X, time on a Ryzen 9 5950X; scripts in `validation/estimate/`. |
 | Resume | `bngsim resume` (0.16.0): a file `DIR/CANCEL` stops a run after the current step with its state saved (exit code 7), `--checkpoint-every K` saves it periodically, and `resume DIR` continues; outputs byte-identical to an uninterrupted run, every session in the provenance. |
 | Archives | `bngsim run --archive none\|chip\|qtl\|all` and `write_archive` (0.17.0): pedigree, records, true and estimated breeding values, traits, QTL, and PLINK 1 binary genotypes (checked with PLINK 1.9 and plink2), per replicate, in the provenance; `infinitesimal` draws exact `N(0, G0 ⊗ A)` breeding values and phenotypes on a pedigree (Tier 2 outputs of Phase 5, for the benchmark of roadmap §7a). |
 | Adapter layer | `src/adapters/` (0.18.0): FisherWright, RelationshipMatrices and Breeding are imported only through one module each, which re-exports the names BnGsim uses and absorbs version differences (`census`, `dense_haplotypes`); a layering test forbids any other reference, and contract tests pin the conventions BnGsim relies on (docs page "Upstream contract"). This closes Phases 0–1. |
@@ -524,10 +524,15 @@ and of resume history. Three things are not yet stable:
    0.30 (and their set depends on the traits and the selection method);
    readers by position broke each time. There is no version of the
    output files.
-3. **The time estimate** is calibrated on single-trait scenarios with
+3. **The time estimate** was calibrated on single-trait scenarios with
    small genomes; for large genomes and multi-trait scenarios with
    repeated records it was about five times too low, and after the
-   performance fixes of 0.36.0 two to three times (the memory estimate holds; see "Resource estimate").
+   performance fixes of 0.36.0 two to three times. 0.37.0 models it by
+   phase, calibrated on 51 scenarios: mostly within about ±30 % per
+   replicate on the calibration host, with one scenario 2.1 times low and
+   the estimate likely low beyond 13 000 genotyped animals. 0.37.0 also
+   fixed the memory estimate of several traits and REML, whose peaks had
+   exceeded the bound (see "Resource estimate").
 
 **The Julia API** has three layers:
 
@@ -577,8 +582,10 @@ and of resume history. Three things are not yet stable:
 0.35.0: b (`results_sha256`, which `bngsim merge` compares; the schema
 policy in "Scenarios") and d (`outputs_version` 1 and the page "Output
 files"; the columns of `summary.csv` pinned by tests). What remains open
-for 1.0 is item 3 of the contract: the time estimate of large genomes and
+for 1.0 was item 3 of the contract: the time estimate of large genomes and
 multi-trait scenarios with repeated records. 0.36.0 removed two costs
-that grew with the genome (the examples now run two to three times their
-estimate, not five); the recalibration with terms for founder sampling,
-per-step genome work and multi-trait equations follows.
+that grew with the genome (the examples then ran two to three times their
+estimate, not five); 0.37.0 models the run time by phase (the examples
+1.04 and 1.26 times their estimate per replicate on the calibration
+host). Open: the cubic terms of large dense evaluations, beyond the
+13 000 genotyped animals of the calibration.

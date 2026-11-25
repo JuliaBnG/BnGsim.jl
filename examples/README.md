@@ -12,7 +12,7 @@ threads (BnGsim 0.36).
 | `sheep.json` | sheep preset with crossover interference (ν = 4.3); a bottleneck in the history; a random-sign Gamma effect distribution; GBLUP on two traits; litters of at most two, at most 40 offspring per ram, at most two full sibs per pair | 55 s |
 | `history-qtl.json` | three shared histories with a trait under stabilizing selection whose loci become the QTL (100 of them, breeding effects correlated 0.8 with the historical ones); OCS with ΔF = 1 % per cohort and minimum-coancestry mating; the aggregate reports the between-history standard error (`_seh`) | 11 s |
 
-The resource estimate (`bngsim estimate FILE`) is calibrated on
-single-trait scenarios; for the multi-trait examples with repeated records
-its run time is two to three times too low (see the documentation
-page "Resource estimate").
+The resource estimate (`bngsim estimate FILE`) is calibrated at 8
+threads on another host (time: Ryzen 9 5950X); there one warm replicate of
+`dairy.json` and `sheep.json` ran 1.04 and 1.26 times its estimate (see
+the documentation page "Resource estimate").

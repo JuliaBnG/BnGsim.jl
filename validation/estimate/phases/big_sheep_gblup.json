@@ -1,0 +1,6 @@
+{"schema": "bngsim-scenario", "schema_version": 1, "name": "big_sheep_gblup", "seed": 1, "replicates": 2, "steps": 5,
+ "species": {"preset": "Sheep"},
+ "founders": {"ne": 1000, "nt": 1000, "mr": 1.0, "nid": 600},
+ "loci": {"qtl": {"nlc": 200, "maf": 0.01}, "chip": {"nlc": 3000, "maf": 0.05}},
+ "traits": [{"name": "y", "h2": 0.3}],
+ "scheme": {"noff": 600, "nsire": 30, "ndam": 300, "evaluation": "gblup"}}

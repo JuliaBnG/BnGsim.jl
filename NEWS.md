@@ -1,5 +1,52 @@
 # BnGsim.jl release notes
 
+## v0.37.0 (unreleased)
+
+The time model of the resource estimate, by phase (package roadmap §11,
+contract item 3).
+
+### Changed
+
+- `resource_estimate` computes the run time as the sum of the phases of
+  a run, each fitted to its own timings: the historical runs, founder
+  setup (founder haplotypes × loci), meiosis (offspring × loci),
+  summaries (cohort and founders × loci; pedigree relationships),
+  evaluation (equations; (traits × genotyped)³ of dense G; both under
+  REML; repeated records; the G or H inverse), minimum-coancestry mating,
+  reliabilities, the rest of the loop, and the compilation of the first
+  replicate by the features it uses. On the 51 scenarios of the
+  calibration the measured time per replicate is 0.92 to 1.22 times the
+  estimate (0.89 to 1.45 held out, the examples 1.04 and 1.26), except
+  one scenario with three traits and repeated records at 2.1 times.
+  Beyond 13 000 genotyped animals the
+  estimate is likely low (docs, "Resource estimate").
+- The time model is calibrated on a different host from the memory
+  model: time on an AMD Ryzen 9 5950X (Julia 1.13.4, 8 threads, BnGsim
+  0.37), memory on an AMD Threadripper 3970X (0.15). The `calibration`
+  field of `bngsim estimate` names both.
+
+### Fixed
+
+- The memory estimate of GBLUP and ssGBLUP with several traits or REML:
+  the dense term ignored the number of traits `k` and REML, and peaks
+  exceeded the bound by up to 1.85 times (two traits) and 3.06 times (two
+  traits, REML). The term now grows with `k² - 1` and, under REML, `k²`;
+  every run of the time calibration, five held-out scenarios included, is
+  within its bound. Estimates of such scenarios are larger.
+
+### New
+
+- `time_terms` in `resource_estimate` and in the JSON of `bngsim
+  estimate` (a new key): the run time by part.
+- `validation/estimate/`: `measure_phases.jl`, `run_phases.sh`,
+  `fit_phases.jl`, `phases.tsv` and `fit_phases.txt`; 16 scenarios in
+  `phases/` (large genomes, two and three traits, repeated records, REML,
+  minimum-coancestry mating, up to 13 000 genotyped animals) and five
+  held out in `check/`; and an internal phase timer of the loop, off by default.
+
+No breaking changes to the Julia API or the scenario schema. Results are
+unchanged; estimates change.
+
 ## v0.36.0 (2026-11-24)
 
 Performance of the breeding loop with large genomes.
