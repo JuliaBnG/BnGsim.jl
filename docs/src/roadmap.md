@@ -60,7 +60,7 @@ a dependency, and BnGsim does not aim for API compatibility with them.
 Sequence-level forward simulation belongs in FisherWright (or SLiM), not
 here.
 
-## 2. Current status (v0.38.0)
+## 2. Current status (v1.0.0)
 
 | Area | State |
 | :--- | :--- |
@@ -593,4 +593,5 @@ quadratic ones. Nothing in the contract remains open. 0.38.0 narrows
 the API to what 1.0 promises (decided 2026-11-25): `sample_loci`
 requires `rng`; `philox4x64`, `keyed_int` and `transport` are
 unexported; BnGStructs types are promised as far as BnGsim's compat
-bound allows; the promise is stated on the API page.
+bound allows; the promise is stated on the API page. **1.0.0**
+(decided 2026-11-25), with the code of 0.38.0.

@@ -1,5 +1,25 @@
 # BnGsim.jl release notes
 
+## v1.0.0
+
+The first stable release. The code is that of 0.38.0; what changes is
+the promise. From 1.0 on, within major version 1, these do not change
+incompatibly (the API page, "What 1.0 promises"):
+
+- the names exported by `BnGsim`, with their documented behaviour;
+- the command line: interface 1 and its exit codes;
+- the scenario schema, version 1, under the policy of the page
+  "Scenarios" (keys may be added with defaults that keep results);
+- the output files, `outputs_version` 1 (columns only appended);
+- the reproducibility invariants: results independent of the number of
+  threads and of stopping and resuming, checked by `results_sha256`.
+
+Outside the promise: unexported names, `BnGsim.Legacy`, the coefficients
+of the resource estimate, numerical results across versions, and
+BnGStructs types beyond BnGsim's compat bound.
+
+No breaking changes from 0.38.0. Results of every scenario are unchanged.
+
 ## v0.38.0
 
 The last breaking release before 1.0: the public API is narrowed to what
