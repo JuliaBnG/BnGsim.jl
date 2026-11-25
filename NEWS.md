@@ -16,6 +16,11 @@ The last breaking release before 1.0: the public API is narrowed to what
   draw, the transportation solver of mating). They remain documented and
   reachable as `BnGsim.philox4x64`, `BnGsim.keyed_int`, `BnGsim.transport`,
   outside the 1.0 promise.
+- The crossover sampler of `BnGsim.Legacy` (`crossovers(sp, vm)` and
+  `crossovers(lms, tbp)`, global-generator default) is Legacy's own
+  function, `BnGsim.Legacy.crossovers`, not exported. It was a method of
+  the exported `crossovers`, so it could be called without loading Legacy.
+  `crossovers(rec::MeiosisRecord, g)` is unchanged.
 
 ### New
 

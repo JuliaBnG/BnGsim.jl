@@ -149,7 +149,7 @@ end
         # 400 meioses, means 0.5 and 2.0, tolerance 4 standard errors.
         n1 = n2 = 0
         for seed = 1:400
-            pts = crossovers(sp_len, vm0; rng = MersenneTwister(seed))[1][2:end]
+            pts = BnGsim.Legacy.crossovers(sp_len, vm0; rng = MersenneTwister(seed))[1][2:end]
             n1 += count(p -> p < 1_000_000, pts)                 # chromosome ends mark assortment
             n2 += count(p -> 1_000_000 < p < 2_000_000, pts)
         end
@@ -183,7 +183,7 @@ end
         # variant is labelled chromosome 1, although half lie on chromosome 2.
         vm_bad = VariantMap(fill(Int8(1), nlc), vm0.pos, vm0.ref, vm0.alt)
         @test_throws ArgumentError gene_drop!(og2, hap0, pm, sp_toy, vm_bad; rng = MersenneTwister(104))
-        @test_throws ArgumentError crossovers(sp_toy, vm_bad)
+        @test_throws ArgumentError BnGsim.Legacy.crossovers(sp_toy, vm_bad)
         @test og1.gt == og2.gt
         @test nrow(df_cp1) == 32
 

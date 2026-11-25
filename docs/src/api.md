@@ -14,7 +14,8 @@ From 1.0 on, these do not change incompatibly within a major version:
 Outside the promise: names that are documented here but not exported
 (reach them as `BnGsim.name`; for example `BnGsim.philox4x64`,
 `BnGsim.keyed_int` and `BnGsim.transport`, unexported in 0.38), the
-`BnGsim.Legacy` module, the coefficients of [`resource_estimate`](@ref)
+`BnGsim.Legacy` module (its crossover sampler is
+`BnGsim.Legacy.crossovers`, separate from the exported `crossovers`), the coefficients of [`resource_estimate`](@ref)
 (recalibrated as the code changes), and numerical results of a scenario
 across BnGsim versions (each run records its versions and hashes).
 

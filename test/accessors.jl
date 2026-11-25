@@ -50,8 +50,11 @@ end
     @test all(x -> x in names(BnGsim.Legacy), legacy)
     @test !any(x -> x in names(BnGsim), legacy)
     @test !any(x -> isdefined(BnGsim, x), (:sumMap, :sampleID, :sampleLoci, :gene_drop))
-    # the old crossover sampler is a method of BnGsim.crossovers, defined in Legacy
+    # the old crossover sampler is Legacy's own function (0.38), not a method
+    # of the exported crossovers, so it cannot be reached without Legacy
     sp = GenericSpecies("toy", [20_000_000, 10_000_000])
     vm = VariantMap(collect(UInt32, 1_000_000:1_000_000:29_000_000), sp)
-    @test parentmodule(which(crossovers, (typeof(sp), typeof(vm)))) === BnGsim.Legacy
+    @test BnGsim.Legacy.crossovers !== crossovers
+    @test !hasmethod(crossovers, (typeof(sp), typeof(vm)))
+    @test hasmethod(BnGsim.Legacy.crossovers, (typeof(sp), typeof(vm)))
 end

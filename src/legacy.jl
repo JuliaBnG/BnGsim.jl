@@ -8,7 +8,7 @@
     BnGsim.Legacy
 
 The building blocks of BnGsim 0.1–0.3: a recombination and gene-drop
-toolkit (`sum_map`, `crossovers(sp, vm)`, `gamete!`, `gene_drop!`,
+toolkit (`sum_map`, `BnGsim.Legacy.crossovers(sp, vm)`, `gamete!`, `gene_drop!`,
 `random_mate`, `rnd_ped`, `expand`, `sample_id`), trait helpers
 (`norm_mv!`, `tbv!`, `phenotype!`, `dummy_traits`), founder sampling
 (`FounderPopulation`, `sample_founder_population`), historical
@@ -20,6 +20,10 @@ They draw from an explicit `rng` or the global generator, not from the
 keyed streams of the breeding loop, so their results depend on the order
 of calls and are outside the reproducibility invariants and the 1.0
 promise of BnGsim. Use them with `using BnGsim.Legacy`.
+
+The crossover sampler is a function of its own, `BnGsim.Legacy.crossovers`,
+not exported (0.38): `BnGsim` exports `crossovers` for meiosis records,
+and Legacy's global-generator methods are not reachable through it.
 """
 module Legacy
 
@@ -36,7 +40,6 @@ using ..BnGsim: _to_variant_map
 using ..FisherWrightAdapter
 using ..RelationshipsAdapter
 using ..BreedingAdapter
-import ..BnGsim: crossovers
 
 export sum_map, gamete!, gene_drop!, random_mate, rnd_ped, expand, sample_id
 export norm_mv!, tbv!, phenotype!, dummy_traits
