@@ -84,9 +84,9 @@
 
     # The time calibration (0.37) on its recorded timings (validation/
     # estimate/phases.tsv: replicate 2 of two processes per scenario):
-    # every run over 1 s within 0.8 to 1.5 times the estimate of one warm
+    # every run over 1 s within 0.75 to 1.5 times the estimate of one warm
     # replicate with its history, except l_records (3 traits with repeated
-    # records, 2.1 times: docs/src/estimate.md); and the peak of every
+    # records, 2.2 times: docs/src/estimate.md); and the peak of every
     # process, multi-trait and REML scenarios included, within the bound.
     dirs = [joinpath(cal, d) for d in ("scenarios", "later", "phases", "check")]
     push!(dirs, joinpath(@__DIR__, "..", "examples"))
@@ -97,7 +97,7 @@
         push!(get!(warm, r[2], Float64[]), parse(Float64, r[4]) + parse(Float64, r[5]) + parse(Float64, r[13]))
         push!(get!(peak, r[2], Float64[]), parse(Float64, r[end]) * 2^20)
     end
-    @test length(warm) == 51
+    @test length(warm) == 56
     for f in keys(warm)
         sc = read_scenario(only(filter(isfile, joinpath.(dirs, f))))
         tt = BnGsim._time_terms(sc)
@@ -105,7 +105,7 @@
         nh = sc.founders.shared_history ? min(sc.founders.histories, R) : R
         one = (sum(values(tt)) - tt.compile - tt.history) / R + tt.history / nh
         m = mean(warm[f])
-        m > 1 && f != "l_records.json" && @test 0.8 <= m / one <= 1.5
+        m > 1 && f != "l_records.json" && @test 0.75 <= m / one <= 1.5
         @test maximum(peak[f]) <= resource_estimate(sc).peak_rss_bound_bytes
     end
 

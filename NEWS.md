@@ -1,6 +1,29 @@
 # BnGsim.jl release notes
 
-## v0.37.0 (unreleased)
+## v0.37.1
+
+The time of large dense evaluations in the resource estimate.
+
+### Fixed
+
+- The run time of GBLUP and ssGBLUP with many genotyped animals was
+  underestimated: in 0.37.0 the cubic cost of inverting G had fitted to
+  zero, because the calibration scenarios (up to 13 000 genotyped animals)
+  all had a 5000-locus chip, so it could not be separated from forming G.
+  With 20 000 genotyped animals and a 1000-locus chip the inverse took
+  21 s against 3 s estimated. Five scenarios up to 20 000 genotyped
+  animals with chips of 1000 to 20 000 loci, and two traits at 10 000
+  (`validation/estimate/phases/`), now identify it; the model is refitted
+  on 56 scenarios: measured/estimate 0.77 to 1.28 on the calibration
+  scenarios, 0.88 to 1.49 held out, except the same three-trait scenario
+  with repeated records (2.2). The multi-trait memory coefficient is
+  refitted with the new two-trait scenario (9.83, REML 9.85); every run
+  stays within its bound.
+
+No breaking changes; results unchanged, estimates of large dense
+evaluations larger.
+
+## v0.37.0
 
 The time model of the resource estimate, by phase (package roadmap §11,
 contract item 3).

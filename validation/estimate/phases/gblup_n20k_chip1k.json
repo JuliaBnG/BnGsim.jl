@@ -1,0 +1,6 @@
+{"schema": "bngsim-scenario", "schema_version": 1, "name": "gblup_n20k_chip1k", "seed": 1, "steps": 3,
+ "species": {"name": "toy", "chromosome": [50000000, 50000000]},
+ "founders": {"ne": 4000, "nt": 1000, "mr": 1.0, "nid": 4000},
+ "loci": {"qtl": {"nlc": 200, "maf": 0.01}, "chip": {"nlc": 1000, "maf": 0.01}},
+ "traits": [{"name": "y", "h2": 0.3}],
+ "scheme": {"noff": 8000, "nsire": 100, "ndam": 400, "evaluation": "gblup"}}

@@ -99,28 +99,27 @@ const _MEM = (
 const _MEM_BOUND_FACTOR = 1.3
 # Run time (0.37): seconds per unit of each feature of `_time_features`,
 # each phase fitted to its own timings (validation/estimate/fit_phases.jl
-# on the phase timings of run_phases.sh, phases.tsv: 51 scenarios, two
+# on the phase timings of run_phases.sh, phases.tsv: 56 scenarios, two
 # processes each, on an AMD Ryzen 9 5950X, Linux x86_64, Julia 1.13.4, 8
 # threads); `history` per allele carried through one meiosis of the
 # historical run and `history_cache` the same times `_cache_factor`,
 # `rest` per time step and `rest_animal` per animal and step, `compile`
 # the cold-minus-warm cost of the first replicate by what the scenario
 # uses (`_compile_flags`). Terms fitted to zero are kept so that the
-# fit can be rerun: in particular the cubic terms of the dense equations
-# and inverses are not distinguishable from the quadratic ones up to the
-# 13 000 genotyped animals of the calibration.
+# fit can be rerun. The cubic terms are identified by scenarios up to
+# 20 000 genotyped animals with chips of 1000 to 20 000 loci (0.37.1).
 const _TIME = (
-    history = 2.226e-10, history_cache = 9.562e-11,
-    setup = 2.729e-9, setup_fixed = 0.003429,
-    meiosis = 2.043e-11,
-    summary_genome = 7.864e-11, summary_pedigree = 2.483e-9,
-    equations = 1.514e-6, equations2 = 0.0, dense = 0.0, dense2 = 4.145e-8,
-    reml_equations = 1.742e-5, reml_dense = 8.445e-11, records = 0.0,
-    grm = 5.465e-12, inverse = 0.0, grm_ss = 7.235e-12, inverse_ss = 0.0,
+    history = 2.223e-10, history_cache = 9.748e-11,
+    setup = 2.53e-9, setup_fixed = 0.013,
+    meiosis = 1.741e-11,
+    summary_genome = 7.183e-11, summary_pedigree = 2.268e-9,
+    equations = 1.514e-6, equations2 = 0.0, dense = 2.213e-13, dense2 = 4.061e-8,
+    reml_equations = 1.742e-5, reml_dense = 8.44e-11, records = 0.0,
+    grm = 2.923e-12, inverse = 1.655e-12, grm_ss = 8.514e-12, inverse_ss = 0.0,
     mating = 2.364e-8,
     reliability = 8.329e-9,
-    rest = 0.003437, rest_animal = 3.833e-7,
-    compile = (0.495, 0.0, 0.0, 0.627, 0.0, 0.498, 0.0, 0.288),
+    rest = 0.003428, rest_animal = 4.635e-7,
+    compile = (0.414, 0.0, 0.0, 0.0, 0.0, 0.683, 0.0, 0.369),
 )
 # Terms added after the calibration, from the data structures rather than a
 # fit (docs/src/estimate.md, "Later terms"): bytes per repeated record
@@ -137,12 +136,12 @@ const _MEM_RELIABILITY = 8.0 * 64
 # genotyped × genotyped matrix per k² - 1 for k traits, and per k² with
 # REML; fitted to the peaks of the multi-trait and REML scenarios of the
 # time calibration (validation/estimate/fit_phases.jl, Ryzen 9 5950X).
-# Fitted on two scenarios per evaluation (mt2_gblup and reml2_gblup;
-# mt2_ssgblup and rep2_ssgblup), so exactly; REML with ssGBLUP uses the
-# GBLUP value. Held out in check/: three traits, REML with one and two
+# Fitted on the multi-trait and REML scenarios of each evaluation (GBLUP:
+# mt2_gblup, mt2_gblup_n10k, reml2_gblup; ssGBLUP: mt2_ssgblup and
+# rep2_ssgblup, so exactly); REML with ssGBLUP uses the GBLUP value. Held out in check/: three traits, REML with one and two
 # traits, ssGBLUP with REML, repeated records (mean/expected 0.94 to 1.13).
-const _MEM_TRAITS = (gblup = 9.7, ssgblup = 15.1)
-const _MEM_REML = 9.95
+const _MEM_TRAITS = (gblup = 9.83, ssgblup = 15.1)
+const _MEM_REML = 9.85
 
 # Bytes per byte of one dense genotyped × genotyped matrix.
 function _dense_factor(s::Scenario)
@@ -277,8 +276,8 @@ The resources scenario `s` needs, from the scenario alone:
 - `disk_bytes`: the files `bngsim run` writes;
 - `seconds`: a rough run time of all replicates (historical population and
   breeding loop), on the calibration host of the time model mostly within
-  about ±30 % (up to 2.1 times low on one scenario; likely low beyond
-  13 000 genotyped animals);
+  about ±30 % (up to 2.2 times low on one scenario; calibrated up to
+  20 000 genotyped animals);
 - `time_terms`: `seconds` by part: the historical runs, and over all
   replicates the founder setup, meiosis, summaries, evaluation (with the
   G or H inverse), mating, reliabilities, the rest of the loop, and the
