@@ -193,7 +193,19 @@ struct MeiosisRecord
     pos::Vector{UInt32}
 end
 
+"""
+    crossovers(r::MeiosisRecord, g::Integer) -> AbstractVector{UInt32}
+
+The crossover positions (base pairs on the concatenated genome, ascending)
+of gamete `g` in `r`, a view into the record.
+"""
 crossovers(r::MeiosisRecord, g::Integer) = view(r.pos, r.ptr[g]:(r.ptr[g+1]-1))
+
+"""
+    ncrossovers(r::MeiosisRecord, g::Integer) -> Int
+
+The number of crossovers of gamete `g` in `r`, `length(crossovers(r, g))`.
+"""
 ncrossovers(r::MeiosisRecord, g::Integer) = r.ptr[g+1] - r.ptr[g]
 
 """

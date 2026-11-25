@@ -109,6 +109,12 @@ mutable struct Population
 end
 
 Base.length(pop::Population) = length(pop.sire)
+"""
+    ntraits(pop::Population) -> Int
+    ntraits(s::Scenario) -> Int
+
+The number of traits of a population or a scenario.
+"""
 ntraits(pop::Population) = length(pop.traits)
 """
     ngenerations(pop::Population) -> Int

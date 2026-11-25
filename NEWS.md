@@ -1,5 +1,40 @@
 # BnGsim.jl release notes
 
+## v0.38.0
+
+The last breaking release before 1.0: the public API is narrowed to what
+1.0 will promise.
+
+### Breaking
+
+- `sample_loci` requires `rng`: the default was the global generator,
+  outside the keyed streams (invariant I1). Pass a keyed generator,
+  `keyed_rng(SimKey(…))`. Scenarios already did; their results are
+  unchanged.
+- `philox4x64`, `keyed_int` and `transport` are no longer exported: they
+  are internals (the Philox block function, the version-stable integer
+  draw, the transportation solver of mating). They remain documented and
+  reachable as `BnGsim.philox4x64`, `BnGsim.keyed_int`, `BnGsim.transport`,
+  outside the 1.0 promise.
+- The crossover sampler of `BnGsim.Legacy` (`crossovers(sp, vm)` and
+  `crossovers(lms, tbp)`, global-generator default) is Legacy's own
+  function, `BnGsim.Legacy.crossovers`, not exported. It was a method of
+  the exported `crossovers`, so it could be called without loading Legacy.
+  `crossovers(rec::MeiosisRecord, g)` is unchanged.
+
+### New
+
+- The API page states what 1.0 promises: the exported names, the command
+  line (interface 1), the scenario schema (version 1), the output files
+  (`outputs_version` 1) and the reproducibility invariants; and what it
+  does not (unexported names, `BnGsim.Legacy`, the estimate's
+  coefficients, numerical results across versions, BnGStructs types
+  beyond BnGsim's compat bound).
+- Docstrings for `crossovers(::MeiosisRecord, g)`, `ncrossovers` and
+  `ntraits`, the last exported names without one.
+
+Results of every scenario are unchanged.
+
 ## v0.37.1
 
 The time of large dense evaluations in the resource estimate.

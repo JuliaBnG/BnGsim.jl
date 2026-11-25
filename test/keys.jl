@@ -7,11 +7,11 @@ using Random123: Random123
 @testset "SimKey and keyed streams" begin
     z, f = UInt64(0), typemax(UInt64)
     # Known-answer vectors of Philox4x64-10 (Random123 kat_vectors)
-    @test philox4x64((z, z), (z, z, z, z)) ==
+    @test BnGsim.philox4x64((z, z), (z, z, z, z)) ==
           (0x16554d9eca36314c, 0xdb20fe9d672d0fdc, 0xd7e772cee186176b, 0x7e68b68aec7ba23b)
-    @test philox4x64((f, f), (f, f, f, f)) ==
+    @test BnGsim.philox4x64((f, f), (f, f, f, f)) ==
           (0x87b092c3013fe90b, 0x438c3c67be8d0224, 0x9cc7d7c69cd777b6, 0xa09caebf594f0ba0)
-    @test philox4x64((0xa4093822299f31d0, 0x082efa98ec4e6c89),
+    @test BnGsim.philox4x64((0xa4093822299f31d0, 0x082efa98ec4e6c89),
         (0x243f6a8885a308d3, 0x13198a2e03707344, z, z)) ==
           (0x4876440167f74106, 0xf268c71745f14876, 0x2aeeaf1df0e3941c, 0xa0b2ec3a9d392db5)
     # and agrees with Random123.jl on arbitrary inputs
@@ -19,7 +19,7 @@ using Random123: Random123
     for _ = 1:500
         key = (rand(rng, UInt64), rand(rng, UInt64))
         ctr = (rand(rng, UInt64), rand(rng, UInt64), rand(rng, UInt64), rand(rng, UInt64))
-        @test philox4x64(key, ctr) == Random123.philox(key, ctr, Val(10))
+        @test BnGsim.philox4x64(key, ctr) == Random123.philox(key, ctr, Val(10))
     end
 
     # Golden stream: the layout of a key and the Xoshiro draws it starts
@@ -40,13 +40,13 @@ using Random123: Random123
 
     # Version-independent integers: exact range, uniform, golden values
     r = keyed_rng(k)
-    xs = [keyed_int(r, 3, 9) for _ = 1:70_000]
+    xs = [BnGsim.keyed_int(r, 3, 9) for _ = 1:70_000]
     @test extrema(xs) == (3, 9)
     @test all(abs(count(==(v), xs) - 10_000) < 4 * sqrt(10_000 * 6 / 7) for v = 3:9)
-    @test [keyed_int(keyed_rng(k), UInt32(1), UInt32(3_000_000_000)) for _ = 1:1] == [GOLDEN_INT]
+    @test [BnGsim.keyed_int(keyed_rng(k), UInt32(1), UInt32(3_000_000_000)) for _ = 1:1] == [GOLDEN_INT]
     @test keyed_shuffle!(keyed_rng(k), collect(1:12)) == GOLDEN_SHUFFLE
     @test sort(keyed_shuffle!(keyed_rng(k), collect(1:100))) == 1:100
-    @test keyed_int(keyed_rng(k), 5, 5) == 5
+    @test BnGsim.keyed_int(keyed_rng(k), 5, 5) == 5
 
     # Streams of neighbouring coordinates are not correlated: the first
     # uniform of 20 000 consecutive entities, mean ½ and lag-1 correlation 0

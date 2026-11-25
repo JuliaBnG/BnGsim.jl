@@ -60,7 +60,7 @@ a dependency, and BnGsim does not aim for API compatibility with them.
 Sequence-level forward simulation belongs in FisherWright (or SLiM), not
 here.
 
-## 2. Current status (v0.37.1)
+## 2. Current status (v0.38.0)
 
 | Area | State |
 | :--- | :--- |
@@ -589,4 +589,8 @@ estimate, not five); 0.37.0 models the run time by phase (the examples
 1.04 and 1.26 times their estimate per replicate on the calibration
 host); 0.37.1 measured the cubic cost of large dense evaluations, up to
 20 000 genotyped animals, which 0.37.0 had not separated from the
-quadratic ones. Nothing in the contract remains open.
+quadratic ones. Nothing in the contract remains open. 0.38.0 narrows
+the API to what 1.0 promises (decided 2026-11-25): `sample_loci`
+requires `rng`; `philox4x64`, `keyed_int` and `transport` are
+unexported; BnGStructs types are promised as far as BnGsim's compat
+bound allows; the promise is stated on the API page.

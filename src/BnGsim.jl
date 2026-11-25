@@ -48,9 +48,9 @@ using .Legacy: vanraden_g   # for founder_summary
 
 export crossovers, sample_loci
 export eqtl, scale_qtl, trait_summary, RandomSign, SpikeSlab
-export SimKey, Domain, keyed_rng, philox4x64, keyed_int, keyed_shuffle!
+export SimKey, Domain, keyed_rng, keyed_shuffle!
 export MeiosisMap, MeiosisRecord, make_progeny!, ncrossovers
-export Population, founder_population, Scheme, evaluate!, select_parents, mating_plan, transport, step!, simulate!
+export Population, founder_population, Scheme, evaluate!, select_parents, mating_plan, step!, simulate!
 export generation_summary, ngenerations, generation_ids, current_step, recorded, observed, ntraits, index_weights,
     alive, genotyped, ocs_contributions,
     meioses, founder_segments, segment_inbreeding, irm
